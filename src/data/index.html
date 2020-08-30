@@ -10,47 +10,142 @@
 		<script src="//cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.2/html5shiv.min.js"></script>
 		<script src="//cdnjs.cloudflare.com/ajax/libs/respond.js/1.4.2/respond.min.js"></script>
 		<![endif]-->
-		
+		<!-- CSS only -->
+		<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" integrity="sha384-JcKb8q3iqJ61gNV9KGb8thSsNjpSL0n8PARn9HuZOnIxN0hoP+VmmDGMN5t9UJ0Z" crossorigin="anonymous">
+
+		<!-- JS, Popper.js, and jQuery -->
+		<script src="https://code.jquery.com/jquery-3.5.1.slim.min.js" integrity="sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj" crossorigin="anonymous"></script>
+		<script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js" integrity="sha384-9/reFTGAW83EW2RDu2S0VKaIzap3H66lZH81PoYlFhbGU+6BZp6G7niu735Sk7lN" crossorigin="anonymous"></script>
+		<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js" integrity="sha384-B4gt1jrGC7Jh4AgTPSdUtOBvfO8shuf57BaghqFfPlYxofvL8/KUEfYiJOMMV+rV" crossorigin="anonymous"></script>
+		<!-- <link href="main.css" rel="stylesheet"> -->
+		<script src="jogDial.min.js" type="text/javascript"></script>
+		<style>
+			.dial {
+				display: block;
+				position: relative;
+				height: 320px;
+			  }
+			  
+			  .dial.hidden {
+				display: none;
+			  }
+			  
+			  #dial0, #dial1, #dial2, #dial3  {
+				position: relative;
+				width: 260px;
+				height: 260px;
+				margin: 20px auto;
+				background: url('base_one_bg.png');
+				background-repeat: none;
+			  }
+			  div[id$="_knob"] {
+				background-color: #999;
+				background: url('base_one_knob.png');
+				/* background-repeat: none; */
+			  }
+			   
+			  div[id$="_meter"] {
+				width: 200px;
+				height: 10px;
+				margin: 20px auto 30px;
+				background: #999;
+				overflow: hidden;
+				-webkit-border-radius: 5px;
+				-moz-border-radius: 5px;
+				-ms-border-radius: 5px;
+				-o-border-radius: 5px;
+				border-radius: 5px;
+			  }
+			  div[id$="_meter"] div {
+				position: relative;
+				width: 0;
+				height: 100%;
+				background: #80e93a;
+			  }
+			  
+			  header {
+				  padding-bottom: 40px;
+			  }		  
+		</style>	
 	</head>
 
 <body>
-	<h2>Servo Control</h2>
+	<header>
+		<div class="navbar navbar-dark bg-dark shadow-sm">
+			<div class="container d-flex justify-content-between">
+				<a href="#" class="navbar-brand d-flex align-items-center">
+				<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" aria-hidden="true" class="mr-2" viewBox="0 0 24 24" focusable="false"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+				<strong>WebServos</strong>
+				</a>
+				<button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarHeader" aria-controls="navbarHeader" aria-expanded="false" aria-label="Toggle navigation">
+				<span class="navbar-toggler-icon"></span>
+				</button>
+			</div>
+		</div>
+	</header>
+	<div class="container">
 
-	<table>
-	    <tr>
-	        <td><button id="toggleButton" onclick="onPress()" disabled>Toggle LED</button></td>
-	        <td><canvas id="led" width="50" height="50"></canvas></td>
-	    </tr>
-	</table>
+		<div class="dials row" id="dials">
 
-	<div id="output"></div>
+			<div class="well well-lg col-md-5">
+				<h4 class="text-center">Servo 0</h4>
+				<div class="dial" data-servo="0" data-degrees="0" id="dial0"></div>
+				<div id="dial0_meter"><div></div></div>				
+			</div>
+			<div class="well well-lg col-md-5">
+				<h4 class="text-center">Servo 1</h4>
+				<div class="dial" data-servo="1" data-degrees="0" id="dial1"></div>					
+				<div id="dial1_meter"><div></div></div>
+			</div>
+			<div class="well well-lg col-md-5">
+				<h4 class="text-center">Servo 2</h4>
+				<div class="dial" data-servo="2" data-degrees="0" id="dial2"></div>
+				<div id="dial2_meter"><div></div></div>
+			</div>
+			<div class="well well-lg col-md-5">
+				<h4 class="text-center">Servo 3</h4>
+				<div class="dial" data-servo="3" data-degrees="0" id="dial3"></div>
+				<div class="meter" id="dial3_meter"><div></div></div>
+			</div>
+		</div>
+	</div>
 
 	<script language="javascript" type="text/javascript">
 		var url = "ws://192.168.4.1:1337/";
-		var output;
-		var button;
-		var canvas;
-		var context;
 
 		// This is called when the page finishes loading
 		function init() {
+			var opts = { 
+				debug: true, 
+				knobSize:'70px',     // 30%
+				wheelSize:'200px',   // 100%
+				minDegree: 0, 
+				maxDegree: 270, 
+				touchMode: "knob"
+			};
 
 		    // Assign page elements to variables
-		    button = document.getElementById("toggleButton");
-		    output = document.getElementById("output");
-		    canvas = document.getElementById("led");
+			var dial0 = JogDial(document.getElementById("dial0"), opts)
+				.on("mousemove", function(event){ 
+						$('#dial0_meter div').css('width', Math.round((event.target.rotation/opts.maxDegree)*100) + '%' )
+					});
+			var dial1 = JogDial(document.getElementById("dial1"), opts)
+				.on("mousemove", function(event){ 
+						$('#dial1_meter div').css('width', Math.round((event.target.rotation/opts.maxDegree)*100) + '%' )
+					});
+			var dial2 = JogDial(document.getElementById("dial2"), opts)
+				.on("mousemove", function(event){ 
+						$('#dial2_meter div').css('width', Math.round((event.target.rotation/opts.maxDegree)*100) + '%' )
+					});
+			var dial3 = JogDial(document.getElementById("dial3"), opts)
+				.on("mousemove", function(event){ 
+					$('#dial3_meter div').css('width', Math.round((event.target.rotation/opts.maxDegree)*100) + '%' )
+				});
 
-		    // Draw circle in canvas
-		    context = canvas.getContext("2d");
-		    context.arc(25, 25, 15, 0, Math.PI * 2, false);
-		    context.lineWidth = 3;
-		    context.strokeStyle = "black";
-		    context.stroke();
-		    context.fillStyle = "black";
-		    context.fill();
+			$('[id*="_wheel"]').css('opacity',0);
 
 		    // Connect to WebSocket server
-		    wsConnect(url);
+		       // wsConnect(url);
 		}
 
 		// Call this to connect to the WebSocket server
