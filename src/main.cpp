@@ -3,7 +3,8 @@
 #include <ESP32AnalogRead.h>
 
 #define MAX_SERVOS 4
-#define MAX_QUEUE_SZ 64
+#define MAX_REQUEST_QUEUE_SZ 32
+#define MAX_RESPONSE_QUEUE_SZ 64
 #define SERVO_PULSE_MIN 500
 #define SERVO_PULSE_MAX 2500
 #define SERVO_DEGREE_MAX 270
@@ -38,16 +39,6 @@ Servo servos[MAX_SERVOS];
 ESP32AnalogRead adc[MAX_SERVOS];
 ServoPositions calibrate[MAX_SERVOS];
 
-uint32_t readAnalog(int servo, bool calibration = false) {
-  uint32_t res = adc[servo].readMiliVolts();
-  calibrate[servo].current = res;
-  if (calibration) {
-    calibrate[servo].minPosition = min(calibrate[servo].minPosition, res);
-    calibrate[servo].maxPosition = max(calibrate[servo].maxPosition, res);
-  }
-  return res;
-}
-
 void calibrateServos(long degrees) {
     long servoPositionPost = 0;
     long servoDegrees = 0;
@@ -64,7 +55,10 @@ void calibrateServos(long degrees) {
 
     for(int i = 0; i < MAX_SERVOS; ++i) {
 
-      readAnalog(i, true);
+      calibrate[i].current = adc[i].readMiliVolts();
+      calibrate[i].minPosition = min(calibrate[i].minPosition, calibrate[i].current);
+      calibrate[i].maxPosition = max(calibrate[i].maxPosition, calibrate[i].current);
+
       servoPositionPost = map( calibrate[i].current, calibrate[i].minPosition, calibrate[i].maxPosition, 0, SERVO_DEGREE_MAX);
 
       Serial.printf("Servo: %d,\t W-degrees: %ld,\t delayed-analog: %u,\t delayed-degrees: %ld, min: %u, max: %u \n", 
@@ -122,7 +116,8 @@ void servoTask(void * pServo) {
         vDelay = (int)(abs(servoDegrees - lastKnownDegrees)/60.0 * 100.0 + 50);
         delay( vDelay ); // 100ms/60degrees or 450ms for SERVO_DEGREE_MAX degrees
 
-        pqi->analog = readAnalog(servo, false);
+        calibrate[servo].current = adc[servo].readMiliVolts();;
+        pqi->analog = calibrate[servo].current;
         pqi->current = map( calibrate[servo].current, calibrate[servo].minPosition, calibrate[servo].maxPosition, 0, SERVO_DEGREE_MAX);
         lastKnownDegrees = pqi->current;
         xQueueSend(qResponse, &pqi, portMAX_DELAY);        
@@ -169,13 +164,13 @@ void setup() {
 
     servoMutex = xSemaphoreCreateMutex();
 
-    qResponse = xQueueCreate( MAX_QUEUE_SZ, sizeof( PQItem ) );
+    qResponse = xQueueCreate( MAX_RESPONSE_QUEUE_SZ, sizeof( PQItem ) );
     if(qResponse == NULL) {
       Serial.printf("Error creating the response queue! \n");
     }
 
     for(int i = 0; i < MAX_SERVOS; ++i) {
-      qRequest[i] = xQueueCreate( MAX_QUEUE_SZ, sizeof( PQItem ) );
+      qRequest[i] = xQueueCreate( MAX_REQUEST_QUEUE_SZ, sizeof( PQItem ) );
       if(qRequest[i] == NULL) {
         Serial.printf("Error creating the request queue %d \n", i);
       }
@@ -214,12 +209,14 @@ void loop() {
       for(int servo = 0; servo < MAX_SERVOS; ++servo) {
         servoActionRequest( servo, posDegrees );
       }
+      vTaskDelay( pdMS_TO_TICKS(100) );
     }
 
     for(long posDegrees = SERVO_DEGREE_MAX; posDegrees >= 0; posDegrees -= 90) {
       for(int servo = 0; servo < MAX_SERVOS; ++servo) {
         servoActionRequest( servo, posDegrees );
       }
+      vTaskDelay( pdMS_TO_TICKS(100) );
     }
 }
 

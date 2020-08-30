@@ -137,6 +137,7 @@
 
 	<script language="javascript" type="text/javascript">
 		var url = "ws://192.168.4.1:1337/";
+		
 
 		// This is called when the page finishes loading
 		function init() {
@@ -168,6 +169,9 @@
 				});
 
 			$('[id*="_wheel"]').css('opacity',0);
+
+			var servos = [dial0, dial1, dial2, dial3];			
+			// dial0.angle(45); 
 
 		    // Connect to WebSocket server
 		       // wsConnect(url);
