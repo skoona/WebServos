@@ -66,6 +66,10 @@
 			  header {
 				  padding-bottom: 40px;
 			  }		  
+			  div.actions {
+				  padding-top: 240px;
+				  padding-bottom: 40px;
+			  }		  
 		</style>	
 	</head>
 
@@ -86,28 +90,49 @@
 	<div class="container">
 
 		<div class="dials row" id="dials">
+			<div class="col-md-2">
+				<div class="btn-group-lg btn-group-vertical btn-group-toggle btn-block actions" data-toggle="buttons">
+						<label class="btn btn-lg btn-outline-secondary active">
+							<input type="radio" name="actions" id="follow" autocomplete="off" checked>Follow
+						</label>
+						<label class="btn btn-lg btn-outline-secondary">
+							<input type="radio" name="actions" id="play" autocomplete="off" >Play
+						</label>
+						<label class="btn btn-lg btn-outline-secondary">
+							<input type="radio" name="actions" id="start" autocomplete="off" >Record
+						</label>
+						<label class="btn btn-lg btn-outline-secondary">
+							<input type="radio" name="actions" id="stop" autocomplete="off" >Stop Recording
+						</label>
+				</div>
+			</div>
 
-			<div class="well well-lg col-md-5">
-				<h4 class="text-center">Servo 0</h4>
-				<div class="dial" data-servo="0" data-degrees="0" id="dial0"></div>
-				<div id="dial0_meter"><div></div></div>				
-			</div>
-			<div class="well well-lg col-md-5">
-				<h4 class="text-center">Servo 1</h4>
-				<div class="dial" data-servo="1" data-degrees="0" id="dial1"></div>					
-				<div id="dial1_meter"><div></div></div>
-			</div>
-			<div class="well well-lg col-md-5">
-				<h4 class="text-center">Servo 2</h4>
-				<div class="dial" data-servo="2" data-degrees="0" id="dial2"></div>
-				<div id="dial2_meter"><div></div></div>
-			</div>
-			<div class="well well-lg col-md-5">
-				<h4 class="text-center">Servo 3</h4>
-				<div class="dial" data-servo="3" data-degrees="0" id="dial3"></div>
-				<div class="meter" id="dial3_meter"><div></div></div>
+			<div class="col-md-10">
+				<div class="row">
+					<div class="well well-lg col-md-6">
+						<h4 class="text-center">Servo 0</h4>
+						<div class="dial" data-servo="0" data-degrees="0" id="dial0"></div>
+						<div id="dial0_meter"><div></div></div>				
+					</div>
+					<div class="well well-lg col-md-6">
+						<h4 class="text-center">Servo 1</h4>
+						<div class="dial" data-servo="1" data-degrees="0" id="dial1"></div>					
+						<div id="dial1_meter"><div></div></div>
+					</div>
+					<div class="well well-lg col-md-6">
+						<h4 class="text-center">Servo 2</h4>
+						<div class="dial" data-servo="2" data-degrees="0" id="dial2"></div>
+						<div id="dial2_meter"><div></div></div>
+					</div>
+					<div class="well well-lg col-md-6">
+						<h4 class="text-center">Servo 3</h4>
+						<div class="dial" data-servo="3" data-degrees="0" id="dial3"></div>
+						<div class="meter" id="dial3_meter"><div></div></div>
+					</div>
+				</div>
 			</div>
 		</div>
+
 	</div>
 
 	<script language="javascript" type="text/javascript">
