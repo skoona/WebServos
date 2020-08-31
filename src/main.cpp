@@ -40,12 +40,17 @@ static const int servosPosition[MAX_SERVOS] = {32, 33, 34, 35};
 static const int servoMtrChannel[MAX_SERVOS] = {0, 1, 2, 3};
 static const int servoFdBKChannel[MAX_SERVOS] = {4, 5, 6, 7};
 
+volatile unsigned long guiTimeBase   = 0,      // default time base, target 0.5 seconds
+                  gulLastTimeBase    = 0,      // time base delta
+                  gulRecordInterval  = 500;    // Ticks interval 0.5 seconds
+volatile bool     gbRecordMode       = false,  // Recording
+                  gvDuration         = false;  // 1/2 second marker
+
 // Constants
 const char* ssid = "SFNSS1-24G";
 const char* password = "Apache Tomcat 8";
 
-QueueHandle_t qRequest[MAX_SERVOS], 
-                       qResponse;
+QueueHandle_t qRequest[MAX_SERVOS];
 
 volatile SemaphoreHandle_t servoMutex;
 
@@ -75,16 +80,32 @@ WebSocketsServer webSocket = WebSocketsServer(1337);
 
 char msg_buffer[128];
 char message[128];
+char recordBuffer[128];
 char lastBuffer[128];
 bool online = false;
 volatile int clientOnline = 0;
-volatile bool servoRecordMode = false;
+
+/*
+ * Record generator
+*/
+void servoRecordRequest() {
+    uint32_t degree = 0;
+
+    for(int servo = 0; servo < MAX_SERVOS; ++servo) {
+        calibrate[servo].current = adc[servo].readMiliVolts();;
+        degree = map( calibrate[servo].current, calibrate[servo].minPosition, calibrate[servo].maxPosition, 0, SERVO_DEGREE_MAX);
+        snprintf(recordBuffer, sizeof(recordBuffer), "{\"action\":\"record\",\"servo\":%d,\"degree\":%u}", servo, degree);
+        Serial.printf("Recording: %s\n", recordBuffer);
+        webSocket.broadcastTXT( recordBuffer, strlen(recordBuffer), false );
+    }
+}
 
 /*
  * Function to send new request
 */
-void servoActionRequest(int servo, int degrees) {
+void servoActionRequest(int servo, int degrees) {    
     PQItem pqi = NULL;
+
     pqi = (PQItem) heap_caps_malloc(sizeof( QItem ), MALLOC_CAP_8BIT);  // heap_caps_free() or free() later
     if (pqi != NULL) {
       pqi->servo  = servo;
@@ -96,31 +117,11 @@ void servoActionRequest(int servo, int degrees) {
 }
 
 /*
- * Task to drain response queue
-*/
-void servoActionResponse(void * _unused) {
-  PQItem pqi = NULL;
-  while ( true) {
-    if( xQueueReceive(qResponse, &pqi, portMAX_DELAY) == pdTRUE ) {
-      /* Do something useful with pqi */
-      // '{"action":"record","servo":2,"degree":135}'
-      if (online && clientOnline >= 1 && servoRecordMode ) {      
-        snprintf(message, sizeof(message), "{\"action\":\"record\",\"servo\":%d,\"degree\":%d}", pqi->servo, pqi->degree);
-        String mesg = String(message);
-        webSocket.broadcastTXT( mesg );
-      }
-      heap_caps_free(pqi);
-    }
-  }
-  vTaskDelete( NULL );
-}
-
-/*
  * function to re-attach servos
 */
 bool attachServos() {
   bool rc = true;
-  servoRecordMode = false;
+  gbRecordMode = false;
   for(int i = 0; i < MAX_SERVOS; ++i) {
     if(!servos[i].attach(servosPins[i],servoMtrChannel[i], 0, SERVO_DEGREE_MAX, SERVO_PULSE_MIN, SERVO_PULSE_MAX )) {
       Serial.printf("Servo %d attach error! \n", i);
@@ -135,7 +136,7 @@ bool attachServos() {
 */
 bool detachServos() {
   bool rc = true;
-  servoRecordMode = true;
+  gbRecordMode = true;
   for(int i = 0; i < MAX_SERVOS; ++i) {
     if(!servos[i].detach()) {
       Serial.printf("Servo %d detach error! \n", i);
@@ -187,37 +188,56 @@ void onWebSocketEvent(uint8_t client_num,
  
       errorJson = deserializeJson(doc, payload);
       if(errorJson) {
-        Serial.printf("Invalid Input, deserializeJson() failed! cause=%s\n", errorJson.c_str());
+        Serial.printf("deserializeJson() failed! cause=%s\n", errorJson.c_str());
         break;
       }
 
       // determine action
       if ( strcmp(doc["action"], "currentState") == 0 ) { // move to neutral positon -- currentState
-        String mesg;
         Serial.printf("Current State Action \n");
         for(int i = 0; i < MAX_SERVOS; ++i) {
           snprintf(message, sizeof(message), "{\"action\":\"state\",\"servo\":%d,\"degree\":%d}", i, calibrate[i].degree);
-          mesg = String(message);
-          webSocket.broadcastTXT( mesg );
+          webSocket.broadcastTXT( message, strlen(message), false );
           Serial.printf("Sending currentState=%s\n", message);
         }
 
       } else if ( strcmp(doc["action"], "follow") == 0 ) {
         Serial.printf("Follow Action \n");
-        if ( doc.containsKey("degree") ) {
+        if ( !gbRecordMode && doc.containsKey("degree") ) {
           servoActionRequest(doc["servo"], doc["degree"]);        
-        } 
+        } else if (!doc.containsKey("degree")) {
+          attachServos();
+          snprintf(message, sizeof(message), "{\"action\":\"follow\"}");
+          Serial.printf("Follow: %s\n", message);
+          webSocket.broadcastTXT( message, strlen(message), false );
+        }
 
       } else if ( strcmp(doc["action"], "play") == 0 ) {
         Serial.printf("Play Action \n");
+        if(gbRecordMode) {
+          attachServos();
+        }
+        snprintf(message, sizeof(message), "{\"action\":\"play\"}");
+        Serial.printf("Playing: %s\n", message);
+        webSocket.broadcastTXT( message, strlen(message), false );
 
       } else if ( strcmp(doc["action"], "startRecord") == 0 ) {
         Serial.printf("StartRecord Action \n");
-        detachServos();
+        if (!gbRecordMode) {
+          detachServos();
+        }
+        snprintf(message, sizeof(message), "{\"action\":\"startRecord\"}");
+        Serial.printf("Recording: %s\n", message);
+        webSocket.broadcastTXT( message, strlen(message), false );
 
       } else if ( strcmp(doc["action"], "stopRecord") == 0 ) {
         Serial.printf("StopRecord Action \n");
-        attachServos();
+        if(gbRecordMode) {
+          attachServos();
+        }
+        snprintf(message, sizeof(message), "{\"action\":\"stopRecord\"}");
+        Serial.printf("Stop Recording: %s\n", message);
+        webSocket.broadcastTXT( message, strlen(message), false );
 
       } else {
         Serial.println("Message not recognized!");
@@ -240,15 +260,12 @@ void onIndexRequest(AsyncWebServerRequest *request) {
                   "] HTTP GET request of " + request->url());
   request->send(SPIFFS, "/index.html", "text/html");
 }
-
-// Callback: send style sheet
 void onJSRequest(AsyncWebServerRequest *request) {
   IPAddress remote_ip = request->client()->remoteIP();
   Serial.println("[" + remote_ip.toString() +
                   "] HTTP GET request of " + request->url());
   request->send(SPIFFS, "/jogDial.min.js", "text/javascript");
 }
-
 void onImgKnobRequest(AsyncWebServerRequest *request) {
   IPAddress remote_ip = request->client()->remoteIP();
   Serial.println("[" + remote_ip.toString() +
@@ -261,7 +278,6 @@ void onImgBgRequest(AsyncWebServerRequest *request) {
                   "] HTTP GET request of " + request->url());
   request->send(SPIFFS, "/base_one_bg.png", "image/png");
 }
-
 // Callback: send 404 if requested file does not exist
 void onPageNotFound(AsyncWebServerRequest *request) {
   IPAddress remote_ip = request->client()->remoteIP();
@@ -281,10 +297,9 @@ void calibrateServos(long degrees) {
       servos[i].write(servoDegrees);      
     }
 
-    delay(500);
+    vTaskDelay(500/portTICK_PERIOD_MS);
 
     for(int i = 0; i < MAX_SERVOS; ++i) {
-
       calibrate[i].current = adc[i].readMiliVolts();
       calibrate[i].minPosition = min(calibrate[i].minPosition, calibrate[i].current);
       calibrate[i].maxPosition = max(calibrate[i].maxPosition, calibrate[i].current);
@@ -316,26 +331,20 @@ void servoTask(void * pServo) {
         servoDegrees = pqi->degree;
       } 
 
-      if (servoRecordMode) {
-        lastKnownDegrees = servoDegrees;
-        pqi->current = servoDegrees;
-        xQueueSend(qResponse, &pqi, portMAX_DELAY);  
-
-      } else if(xSemaphoreTake(servoMutex, portMUX_NO_TIMEOUT) == pdTRUE) {
+      if( !gbRecordMode && xSemaphoreTake(servoMutex, portMUX_NO_TIMEOUT) == pdTRUE) {
         servos[servo].write(servoDegrees);  
         xSemaphoreGive(servoMutex);
         
         vDelay = (int)(abs(servoDegrees - lastKnownDegrees)/60.0 * 100.0 + 50);
-        delay( vDelay ); // 100ms/60degrees or 450ms for SERVO_DEGREE_MAX degrees
+        vTaskDelay(vDelay/portTICK_PERIOD_MS); // 100ms/60degrees or 450ms for SERVO_DEGREE_MAX degrees
 
         calibrate[servo].current = adc[servo].readMiliVolts();;
-        pqi->analog = calibrate[servo].current;
-        pqi->current = map( calibrate[servo].current, calibrate[servo].minPosition, calibrate[servo].maxPosition, 0, SERVO_DEGREE_MAX);
-        lastKnownDegrees = pqi->current;
-        xQueueSend(qResponse, &pqi, portMAX_DELAY);        
-        Serial.printf("Servo %d analog: %u, stackHighwater: %d, QueueDepth: %d\n", 
-                       servo, pqi->analog, uxTaskGetStackHighWaterMark(NULL), uxQueueMessagesWaiting( requestQueue ));
+        calibrate[servo].degree = map( calibrate[servo].current, calibrate[servo].minPosition, calibrate[servo].maxPosition, 0, SERVO_DEGREE_MAX);
+        Serial.printf("Servo %d analog: %u, degree: %u, stackHighwater: %d, QueueDepth: %d\n", 
+                       servo, pqi->analog, calibrate[servo].degree, uxTaskGetStackHighWaterMark(NULL), uxQueueMessagesWaiting( requestQueue ));
       } 
+      lastKnownDegrees = servoDegrees;
+      heap_caps_free(pqi); // free allocation
     } else {
       vTaskDelay(1000/portTICK_PERIOD_MS);
     }
@@ -346,15 +355,6 @@ void servoTask(void * pServo) {
 
 void generateServoTasks() {
   static char const *pchTitle[4] = {"ServoTask-00", "ServoTask-01", "ServoTask-02", "ServoTask-03"};
-    xTaskCreatePinnedToCore(
-        servoActionResponse,  // Function that should be called
-        "Queue Consumer",     // Name of the task (for debugging)
-        2048,                 // Stack size (bytes)
-        NULL,                 // Parameter to pass
-        3,                    // Task priority
-        NULL,                 // Task handle
-        tskNO_AFFINITY        // Run on any available core
-      );
 
   for(int servo = 0; servo < MAX_SERVOS; ++servo) {
     xTaskCreatePinnedToCore(
@@ -370,57 +370,52 @@ void generateServoTasks() {
 }
 
 void setup() {
-    Serial.begin(115200);
+  Serial.begin(115200);
 
-    Serial.println("Skoona.net Multple Servos with Feedback.");
+  Serial.println("Skoona.net Multple Servos with Feedback.");
 
-    servoMutex = xSemaphoreCreateMutex();
+  servoMutex = xSemaphoreCreateMutex();
 
-    qResponse = xQueueCreate( MAX_RESPONSE_QUEUE_SZ, sizeof( PQItem ) );
-    if(qResponse == NULL) {
-      Serial.printf("Error creating the response queue! \n");
+  for(int i = 0; i < MAX_SERVOS; ++i) {
+    qRequest[i] = xQueueCreate( MAX_REQUEST_QUEUE_SZ, sizeof( PQItem ) );
+    if(qRequest[i] == NULL) {
+      Serial.printf("Error creating the request queue %d \n", i);
     }
+      
+    pinMode(servosPosition[i], INPUT);
+    pinMode(servosPins[i], OUTPUT);
 
-    for(int i = 0; i < MAX_SERVOS; ++i) {
-      qRequest[i] = xQueueCreate( MAX_REQUEST_QUEUE_SZ, sizeof( PQItem ) );
-      if(qRequest[i] == NULL) {
-        Serial.printf("Error creating the request queue %d \n", i);
-      }
-        
-      pinMode(servosPosition[i], INPUT);
-      pinMode(servosPins[i], OUTPUT);
-
-      adc[i].attach(servosPosition[i]);
-      calibrate[i].minPosition = 155;
-      calibrate[i].maxPosition = 3105;
-    
-      if(!servos[i].attach(servosPins[i],servoMtrChannel[i], 0, SERVO_DEGREE_MAX, SERVO_PULSE_MIN, SERVO_PULSE_MAX )) {
-        Serial.printf("Servo %d attach error! \n", i);
-      }
-      servoRecordMode = false;
+    adc[i].attach(servosPosition[i]);
+    calibrate[i].minPosition = 155;
+    calibrate[i].maxPosition = 3105;
+  
+    if(!servos[i].attach(servosPins[i],servoMtrChannel[i], 0, SERVO_DEGREE_MAX, SERVO_PULSE_MIN, SERVO_PULSE_MAX )) {
+      Serial.printf("Servo %d attach error! \n", i);
     }
+    gbRecordMode = false;
+  }
 
-    /*
-     * Calibrate Servos
-    */
-    calibrateServos(135);
-    calibrateServos(0);    
-    calibrateServos(135);
-    calibrateServos(SERVO_DEGREE_MAX);
-    calibrateServos(135);
+  /*
+    * Calibrate Servos
+  */
+  calibrateServos(135);
+  calibrateServos(0);    
+  calibrateServos(135);
+  calibrateServos(SERVO_DEGREE_MAX);
+  calibrateServos(135);
 
-    /*
-     * Create Servo Handler
-     */
-    generateServoTasks();
+  /*
+   * Create Servo Handler
+  */
+  generateServoTasks();
 
-// Make sure we can read the file system
+  // Make sure we can read the file system
   if( !SPIFFS.begin()){
     Serial.println("Error mounting SPIFFS");
     while(1);
   }
 
- WiFi.begin(ssid, password);
+  WiFi.begin(ssid, password);
   while ( WiFi.status() != WL_CONNECTED ) {
     delay(500);
     Serial.print(".");
@@ -431,25 +426,11 @@ void setup() {
   Serial.print("My IP address: ");
   Serial.println(WiFi.localIP());
 
- /*
-    // Start access point
-    WiFi.softAP(ssid, password);
-    
-    // Print our IP address
-    Serial.println();
-    Serial.println("AP running");
-    Serial.print("My IP address: ");
-    Serial.println(WiFi.softAPIP());
-  */
-
   // On HTTP request for root, provide index.html file
   server.on("/", HTTP_GET, onIndexRequest);
-
-  // On HTTP Assets
   server.on("/jogDial.min.js", HTTP_GET, onJSRequest);
   server.on("/base_one_knob.png", HTTP_GET, onImgKnobRequest);
   server.on("/base_one_bg.png", HTTP_GET, onImgBgRequest);
-
   server.onNotFound(onPageNotFound);
 
   server.begin();
@@ -458,18 +439,21 @@ void setup() {
   webSocket.begin();
   webSocket.onEvent(onWebSocketEvent);
   
-
-    Serial.printf("Setup Complete !\n");
+  Serial.printf("Setup Complete !\n");
 }
 
 void loop() {
+  guiTimeBase = millis();
+  gvDuration = ((guiTimeBase - gulLastTimeBase) >= gulRecordInterval);
   webSocket.loop();
-}
 
-/*
- Record Function:
- Start Timer for period x
-  on period x
-    - capture analog to degree
-    - send degree to websocket for each servo
-*/
+  if (gvDuration && gbRecordMode) {
+    servoRecordRequest();
+  }
+
+  if (gvDuration) { // Every half second poll 
+    gulLastTimeBase = guiTimeBase;
+  }
+
+  taskYIELD();
+}

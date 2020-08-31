@@ -182,10 +182,8 @@
 
 			$('[id*="_wheel"]').css('opacity',0);
 
-			// dial0.angle(45); 
-
-		    // Connect to WebSocket server
-		    wsConnect(url);
+	    // Connect to WebSocket server
+	    wsConnect(url);
 		}
 
 		function handleMode(id) {
@@ -195,7 +193,6 @@
 
 		// Call this to connect to the WebSocket server
 		function wsConnect(url) {
-
 		    // Connect to WebSocket server
 		    websocket = new WebSocket(url);
 
@@ -208,21 +205,18 @@
 
 		// Called when a WebSocket connection is established with the server
 		function onOpen(evt) {
-
 		    // Log connection state
 		    console.log("Connected");
 
 		    // Enable button
 		    online = true;
 
-				// Get the current state of the LED
-				
+				// Get the current state of the LED			
 		    doSend('{"action":"currentState"}');
 		}
 
 		// Called when the WebSocket connection is closed
 		function onClose(evt) {
-
 		    // Log disconnection state
 		    console.log("Disconnected");
 
@@ -233,64 +227,65 @@
 		    setTimeout(function() { wsConnect(url) }, 2000);
 		}
 
+		function updateDialPosition(package) {
+			if(package.servo == 0) {
+				vdial0.angle(package.degree); 
+				$('#title0').html( package.degree + '%' );
+
+			} else if (package.servo == 1) {
+				vdial1.angle(package.degree); 
+				$('#title1').html( package.degree + '%' );
+
+			} else if (package.servo == 2) {
+				vdial2.angle(package.degree); 
+				$('#title2').html( package.degree + '%' );
+
+			} else if (package.servo == 3) {
+				vdial3.angle(package.degree); 
+				$('#title3').html( package.degree + '%' );
+
+			} else {
+				console.log("Unknown Servo!: " + evt.data);
+			}
+		}
+
 		// Called when a message is received from the server
 		function onMessage(evt) {
 			var package =  JSON.parse(evt.data);
 
-		    // Print out our received message
-		    console.log("Received=" + evt.data );
-
 		    // Update circle graphic with LED state
 		    switch(package.action) {
 				case "state": // '{"action":"state","servo":2,"degree":135}'
-					if(package.servo == 0) {
-						vdial0.angle(package.degree); 
-
-					} else if (package.servo == 1) {
-						vdial1.angle(package.degree); 
-
-					} else if (package.servo == 2) {
-						vdial2.angle(package.degree); 
-
-					} else if (package.servo == 3) {
-						vdial3.angle(package.degree); 
-
-					} else {
-						console.log("State Unknown Servo!: " + evt.data);
-					}
+					updateDialPosition(package);
+					console.log("State=" + evt.data );
 					break;
 					
 				case "record": // '{"action":"record","servo":2,"degree":135}'
 				  if (!recording) {
 						break;
 					}
-					if(package.servo == 0) {
-						vdial0.angle(package.degree); 
-
-					} else if (package.servo == 1) {
-						vdial1.angle(package.degree); 
-
-					} else if (package.servo == 2) {
-						vdial2.angle(package.degree); 
-
-					} else if (package.servo == 3) {
-						vdial3.angle(package.degree); 
-
-					} else {
-						console.log("Record Unknown Servo!: " + evt.data);
-					}
+					updateDialPosition(package);
+					console.log("Recording=" + evt.data );
 					break;
-					
+				
+				case "follow":
+					recording = false;
+					console.log("Follow=" + evt.data );
+					break;
+
 				case "play":
 					recording = false;
+					console.log("Play=" + evt.data );
 					break;
 
 				case "startRecord":
 					recording = true;
+					console.log("Start Recording=" + evt.data );
 					break;
 
 				case "stopRecord":
 					recording = false;
+					console.log("Stop Recording=" + evt.data );
 					break;
 					
 		    default:
