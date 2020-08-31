@@ -3,7 +3,7 @@
 	<head>
 		<meta http-equiv="X-UA-Compatible" content="IE=edge">
 		<meta charset="utf-8" />
-		<title>Multiple Servo Test</title>
+		<title>Web Controlled Servos</title>
 		<meta name="viewport" content="width=device-width, initial-scale=1">
 
 		<!--[if lt IE 9]>
@@ -17,7 +17,7 @@
 		<script src="https://code.jquery.com/jquery-3.5.1.slim.min.js" integrity="sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj" crossorigin="anonymous"></script>
 		<script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js" integrity="sha384-9/reFTGAW83EW2RDu2S0VKaIzap3H66lZH81PoYlFhbGU+6BZp6G7niu735Sk7lN" crossorigin="anonymous"></script>
 		<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js" integrity="sha384-B4gt1jrGC7Jh4AgTPSdUtOBvfO8shuf57BaghqFfPlYxofvL8/KUEfYiJOMMV+rV" crossorigin="anonymous"></script>
-		<!-- <link href="main.css" rel="stylesheet"> -->
+		
 		<script src="jogDial.min.js" type="text/javascript"></script>
 		<style>
 			.dial {
@@ -93,16 +93,16 @@
 			<div class="col-md-2">
 				<div class="btn-group-lg btn-group-vertical btn-group-toggle btn-block actions" data-toggle="buttons">
 						<label class="btn btn-lg btn-outline-secondary active">
-							<input type="radio" name="actions" id="follow" autocomplete="off" checked>Follow
+							<input type="radio" name="follow" id="follow" autocomplete="off" onclick="handleMode(this);" checked>Follow
 						</label>
 						<label class="btn btn-lg btn-outline-secondary">
-							<input type="radio" name="actions" id="play" autocomplete="off" >Play
+							<input type="radio" name="play" id="play" autocomplete="off" onclick="handleMode(this);">Play
 						</label>
 						<label class="btn btn-lg btn-outline-secondary">
-							<input type="radio" name="actions" id="start" autocomplete="off" >Record
+							<input type="radio" name="startRecord" id="start" autocomplete="off" onclick="handleMode(this);">Record
 						</label>
 						<label class="btn btn-lg btn-outline-secondary">
-							<input type="radio" name="actions" id="stop" autocomplete="off" >Stop Recording
+							<input type="radio" name="stopRecord" id="stop" autocomplete="off" onclick="handleMode(this);">Stop Recording
 						</label>
 				</div>
 			</div>
@@ -110,22 +110,22 @@
 			<div class="col-md-10">
 				<div class="row">
 					<div class="well well-lg col-md-6">
-						<h4 class="text-center">Servo 0</h4>
+						<h4 class="text-center">Servo 0 <br/><small class="text-muted" id="title0"></small></h4>
 						<div class="dial" data-servo="0" data-degrees="0" id="dial0"></div>
 						<div id="dial0_meter"><div></div></div>				
 					</div>
 					<div class="well well-lg col-md-6">
-						<h4 class="text-center">Servo 1</h4>
+						<h4 class="text-center">Servo 1<br/><small class="text-muted" id="title1"></small></h4>
 						<div class="dial" data-servo="1" data-degrees="0" id="dial1"></div>					
 						<div id="dial1_meter"><div></div></div>
 					</div>
 					<div class="well well-lg col-md-6">
-						<h4 class="text-center">Servo 2</h4>
+						<h4 class="text-center">Servo 2<br/><small class="text-muted" id="title2"></small></h4>
 						<div class="dial" data-servo="2" data-degrees="0" id="dial2"></div>
 						<div id="dial2_meter"><div></div></div>
 					</div>
 					<div class="well well-lg col-md-6">
-						<h4 class="text-center">Servo 3</h4>
+						<h4 class="text-center">Servo 3<br/><small class="text-muted" id="title3"></small></h4>
 						<div class="dial" data-servo="3" data-degrees="0" id="dial3"></div>
 						<div class="meter" id="dial3_meter"><div></div></div>
 					</div>
@@ -136,13 +136,17 @@
 	</div>
 
 	<script language="javascript" type="text/javascript">
-		var url = "ws://192.168.4.1:1337/";
+		var url = "ws://"+ window.location.hostname +":1337/";
+		var online = false, 
+		    recording = false;
+		var vdial0, vdial1, vdial2, vdial3;
+		var servos = [vdial0, vdial1, vdial2, vdial3];			
 		
 
 		// This is called when the page finishes loading
 		function init() {
 			var opts = { 
-				debug: true, 
+				debug: false, 
 				knobSize:'70px',     // 30%
 				wheelSize:'200px',   // 100%
 				minDegree: 0, 
@@ -151,30 +155,42 @@
 			};
 
 		    // Assign page elements to variables
-			var dial0 = JogDial(document.getElementById("dial0"), opts)
+			vdial0 = JogDial(document.getElementById("dial0"), opts)
 				.on("mousemove", function(event){ 
-						$('#dial0_meter div').css('width', Math.round((event.target.rotation/opts.maxDegree)*100) + '%' )
+						$('#dial0_meter div').css('width', Math.round((event.target.rotation/opts.maxDegree)*100) + '%' );
+						$('#title0').html( Math.round(event.target.degree) + '%' );
+						doSend('{"action":"follow","servo":0,"degree":' + Math.floor( event.target.degree ) +'}');
 					});
-			var dial1 = JogDial(document.getElementById("dial1"), opts)
+			vdial1 = JogDial(document.getElementById("dial1"), opts)
 				.on("mousemove", function(event){ 
-						$('#dial1_meter div').css('width', Math.round((event.target.rotation/opts.maxDegree)*100) + '%' )
+						$('#dial1_meter div').css('width', Math.round((event.target.rotation/opts.maxDegree)*100) + '%' );
+						$('#title1').html( Math.round(event.target.degree) + '%' );
+						doSend('{"action":"follow","servo":1,"degree":' + Math.floor( event.target.degree ) +'}');
 					});
-			var dial2 = JogDial(document.getElementById("dial2"), opts)
+			vdial2 = JogDial(document.getElementById("dial2"), opts)
 				.on("mousemove", function(event){ 
-						$('#dial2_meter div').css('width', Math.round((event.target.rotation/opts.maxDegree)*100) + '%' )
+						$('#dial2_meter div').css('width', Math.round((event.target.rotation/opts.maxDegree)*100) + '%' );
+						$('#title2').html( Math.round(event.target.degree) + '%' );
+						doSend('{"action":"follow","servo":2,"degree":' + Math.floor( event.target.degree ) +'}');
 					});
-			var dial3 = JogDial(document.getElementById("dial3"), opts)
-				.on("mousemove", function(event){ 
-					$('#dial3_meter div').css('width', Math.round((event.target.rotation/opts.maxDegree)*100) + '%' )
+			vdial3 = JogDial(document.getElementById("dial3"), opts)
+				.on("mouseup", function(event){ 
+					$('#dial3_meter div').css('width', Math.round((event.target.rotation/opts.maxDegree)*100) + '%' );
+					$('#title3').html( Math.round(event.target.degree) + '%' );
+					doSend('{"action":"follow","servo":3,"degree":' + Math.floor( event.target.degree ) +'}');
 				});
 
 			$('[id*="_wheel"]').css('opacity',0);
 
-			var servos = [dial0, dial1, dial2, dial3];			
 			// dial0.angle(45); 
 
 		    // Connect to WebSocket server
-		       // wsConnect(url);
+		    wsConnect(url);
+		}
+
+		function handleMode(id) {
+			// '{"action":"follow|play|startRecord|stopRecord"}'
+			doSend('{"action":"' + id.name + '"}')
 		}
 
 		// Call this to connect to the WebSocket server
@@ -184,10 +200,10 @@
 		    websocket = new WebSocket(url);
 
 		    // Assign callbacks
-		    websocket.onopen = function(evt) { onOpen(evt) };
-		    websocket.onclose = function(evt) { onClose(evt) };
+		    websocket.onopen    = function(evt) { onOpen(evt) };
+		    websocket.onclose   = function(evt) { onClose(evt) };
 		    websocket.onmessage = function(evt) { onMessage(evt) };
-		    websocket.onerror = function(evt) { onError(evt) };
+		    websocket.onerror   = function(evt) { onError(evt) };
 		}
 
 		// Called when a WebSocket connection is established with the server
@@ -197,10 +213,11 @@
 		    console.log("Connected");
 
 		    // Enable button
-		    button.disabled = false;
+		    online = true;
 
-		    // Get the current state of the LED
-		    doSend("getLEDState");
+				// Get the current state of the LED
+				
+		    doSend('{"action":"currentState"}');
 		}
 
 		// Called when the WebSocket connection is closed
@@ -210,7 +227,7 @@
 		    console.log("Disconnected");
 
 		    // Disable button
-		    button.disabled = true;
+		    online = false;
 
 		    // Try to reconnect after a few seconds
 		    setTimeout(function() { wsConnect(url) }, 2000);
@@ -218,23 +235,65 @@
 
 		// Called when a message is received from the server
 		function onMessage(evt) {
+			var package =  JSON.parse(evt.data);
 
 		    // Print out our received message
-		    console.log("Received: " + evt.data);
+		    console.log("Received=" + evt.data );
 
 		    // Update circle graphic with LED state
-		    switch(evt.data) {
-		        case "0":
-		            console.log("LED is off");
-		            context.fillStyle = "black";
-		            context.fill();
-		            break;
-		        case "1":
-		            console.log("LED is on");
-		            context.fillStyle = "red";
-		            context.fill();
-		            break;
-		        default:
+		    switch(package.action) {
+				case "state": // '{"action":"state","servo":2,"degree":135}'
+					if(package.servo == 0) {
+						vdial0.angle(package.degree); 
+
+					} else if (package.servo == 1) {
+						vdial1.angle(package.degree); 
+
+					} else if (package.servo == 2) {
+						vdial2.angle(package.degree); 
+
+					} else if (package.servo == 3) {
+						vdial3.angle(package.degree); 
+
+					} else {
+						console.log("State Unknown Servo!: " + evt.data);
+					}
+					break;
+					
+				case "record": // '{"action":"record","servo":2,"degree":135}'
+				  if (!recording) {
+						break;
+					}
+					if(package.servo == 0) {
+						vdial0.angle(package.degree); 
+
+					} else if (package.servo == 1) {
+						vdial1.angle(package.degree); 
+
+					} else if (package.servo == 2) {
+						vdial2.angle(package.degree); 
+
+					} else if (package.servo == 3) {
+						vdial3.angle(package.degree); 
+
+					} else {
+						console.log("Record Unknown Servo!: " + evt.data);
+					}
+					break;
+					
+				case "play":
+					recording = false;
+					break;
+
+				case "startRecord":
+					recording = true;
+					break;
+
+				case "stopRecord":
+					recording = false;
+					break;
+					
+		    default:
 		            break;
 		    }
 		}
@@ -246,14 +305,12 @@
 
 		// Sends a message to the server (and prints it to the console)
 		function doSend(message) {
-		    console.log("Sending: " + message);
-		    websocket.send(message);
-		}
-
-		// Called whenever the HTML button is pressed
-		function onPress() {
-		    doSend("toggleLED");
-		    doSend("getLEDState");
+			if (online) {
+				console.log("Online, Sending: " + message);
+				websocket.send(message);
+			} else {
+				console.log("Offline, Not sending: " + message);
+			}
 		}
 
 		// Call the init function as soon as the page loads
