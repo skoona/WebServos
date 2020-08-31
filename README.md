@@ -10,4 +10,5 @@ Features:
 * Requires Internet Access; standalone AP Configuration `ESP32_WebServo`
 
 # User Interface
-!(ScreenShot)[./UI.png]
+![ScreenShot](./UI.png)
+
