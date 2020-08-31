@@ -6,6 +6,12 @@
  * PWM Channel       4    5    6    7
  * ADC Input Pin    32   33   34   35
  * 
+ *  [Browser]        [ESP32]
+ * currentState -->   send('state')
+ * follow       -->   move Servo#
+ * play         -->   noop
+ * startRecord  -->   disable-move send('record')
+ * stopRecord   -->   enable-move  
  * 
 */ 
 
