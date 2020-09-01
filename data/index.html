@@ -137,15 +137,7 @@
 
 	<script language="javascript" type="text/javascript">
 		var url = "ws://"+ window.location.hostname +":1337/";
-		var online = false, 
-		    recording = false;
-		var vdial0, vdial1, vdial2, vdial3;
-		var servos = [vdial0, vdial1, vdial2, vdial3];			
-		
-
-		// This is called when the page finishes loading
-		function init() {
-			var opts = { 
+		var opts = { 
 				debug: false, 
 				knobSize:'70px',     // 30%
 				wheelSize:'200px',   // 100%
@@ -153,22 +145,29 @@
 				maxDegree: 270, 
 				touchMode: "knob"
 			};
+		var online = false, 
+		    recording = false;
+		var vdial0, vdial1, vdial2, vdial3;
+		
+
+		// This is called when the page finishes loading
+		function init() {
 
 		    // Assign page elements to variables
 			vdial0 = JogDial(document.getElementById("dial0"), opts)
-				.on("mousemove", function(event){ 
+				.on("mouseup", function(event){ 
 						$('#dial0_meter div').css('width', Math.round((event.target.rotation/opts.maxDegree)*100) + '%' );
 						$('#title0').html( Math.round(event.target.degree) + '%' );
 						doSend('{"action":"follow","servo":0,"degree":' + Math.floor( event.target.degree ) +'}');
 					});
 			vdial1 = JogDial(document.getElementById("dial1"), opts)
-				.on("mousemove", function(event){ 
+				.on("mouseup", function(event){ 
 						$('#dial1_meter div').css('width', Math.round((event.target.rotation/opts.maxDegree)*100) + '%' );
 						$('#title1').html( Math.round(event.target.degree) + '%' );
 						doSend('{"action":"follow","servo":1,"degree":' + Math.floor( event.target.degree ) +'}');
 					});
 			vdial2 = JogDial(document.getElementById("dial2"), opts)
-				.on("mousemove", function(event){ 
+				.on("mouseup", function(event){ 
 						$('#dial2_meter div').css('width', Math.round((event.target.rotation/opts.maxDegree)*100) + '%' );
 						$('#title2').html( Math.round(event.target.degree) + '%' );
 						doSend('{"action":"follow","servo":2,"degree":' + Math.floor( event.target.degree ) +'}');
@@ -231,18 +230,22 @@
 			if(package.servo == 0) {
 				vdial0.angle(package.degree); 
 				$('#title0').html( package.degree + '%' );
-
+				$('#dial0_meter div').css('width', ( package.degree/opts.maxDegree*100 ) + '%' );
+				
 			} else if (package.servo == 1) {
 				vdial1.angle(package.degree); 
 				$('#title1').html( package.degree + '%' );
+				$('#dial1_meter div').css('width', ( package.degree/opts.maxDegree*100 ) + '%' );
 
 			} else if (package.servo == 2) {
 				vdial2.angle(package.degree); 
 				$('#title2').html( package.degree + '%' );
+				$('#dial2_meter div').css('width', ( package.degree/opts.maxDegree*100 ) + '%' );
 
 			} else if (package.servo == 3) {
 				vdial3.angle(package.degree); 
 				$('#title3').html( package.degree + '%' );
+				$('#dial3_meter div').css('width', ( package.degree/opts.maxDegree*100 ) + '%' );
 
 			} else {
 				console.log("Unknown Servo!: " + evt.data);

@@ -13,3 +13,6 @@ Features:
 # User Interface
 ![ScreenShot](./UI.png)
 
+## ESP32 Board
+LOLIN32 V1.0.0 WiFi + bluetooth Module ESP-32 4MB FLASH Development Board
+

@@ -10,16 +10,16 @@
  * currentState -->   send('state')
  * follow       -->   move Servo#
  * play         -->   noop
- * startRecord  -->   disable-move send('record')
- * stopRecord   -->   enable-move  
- * 
+ * startRecord  -->   disable-move send('record') stream every interval
+ * stopRecord   -->   enable-move  stop('record') stream
+ * button[follow,play,startRecord,stopRecord] -> if no 'degree' send(button) only
 */ 
 
 #include "Arduino.h"
 
 #include <WiFi.h>
 #include <SPIFFS.h>
-#include <ESPAsyncWebServer.h>
+#include <ESP_WiFiManager.h>
 #include <WebSocketsServer.h>
 
 #include <Servo.h>
@@ -44,7 +44,8 @@ volatile unsigned long guiTimeBase   = 0,      // default time base, target 0.5 
                   gulLastTimeBase    = 0,      // time base delta
                   gulRecordInterval  = 500;    // Ticks interval 0.5 seconds
 volatile bool     gbRecordMode       = false,  // Recording
-                  gvDuration         = false;  // 1/2 second marker
+                  gvDuration         = false,  // 1/2 second marker
+                  gbWSOnline = false;          // WebSocket Client Connected
 
 // Constants
 const char* ssid = "SFNSS1-24G";
@@ -68,35 +69,33 @@ typedef struct _servoPosition {
   uint32_t maxPosition;
 } ServoPositions, *PServoPostions;
 
-
 Servo servos[MAX_SERVOS];
 ESP32AnalogRead adc[MAX_SERVOS];
 ServoPositions calibrate[MAX_SERVOS];
-
 AsyncWebServer server(80);
 WebSocketsServer webSocket = WebSocketsServer(1337);
 
-// StaticJsonBuffer<64> jsonBuffer;
-
-char msg_buffer[128];
-char message[128];
-char recordBuffer[128];
-char lastBuffer[128];
-bool online = false;
-volatile int clientOnline = 0;
+char message[128];           // response messages
+char recordBuffer[128];      // recording entries
+char lastBuffer[128];        // filter duplicate messages
 
 /*
  * Record generator
 */
 void servoRecordRequest() {
-    uint32_t degree = 0;
-
     for(int servo = 0; servo < MAX_SERVOS; ++servo) {
-        calibrate[servo].current = adc[servo].readMiliVolts();;
-        degree = map( calibrate[servo].current, calibrate[servo].minPosition, calibrate[servo].maxPosition, 0, SERVO_DEGREE_MAX);
-        snprintf(recordBuffer, sizeof(recordBuffer), "{\"action\":\"record\",\"servo\":%d,\"degree\":%u}", servo, degree);
-        Serial.printf("Recording: %s\n", recordBuffer);
-        webSocket.broadcastTXT( recordBuffer, strlen(recordBuffer), false );
+      calibrate[servo].current = adc[servo].readMiliVolts();;
+      calibrate[servo].degree = map( calibrate[servo].current, calibrate[servo].minPosition, calibrate[servo].maxPosition, 0, SERVO_DEGREE_MAX);
+      if (calibrate[servo].current >= calibrate[servo].maxPosition) {
+        calibrate[servo].degree = SERVO_DEGREE_MAX;
+      } if (calibrate[servo].current <= calibrate[servo].minPosition) {
+        calibrate[servo].degree = 0;
+      } else {
+        calibrate[servo].degree = calibrate[servo].degree % (SERVO_DEGREE_MAX + 1);
+      }
+      snprintf(recordBuffer, sizeof(recordBuffer), "{\"action\":\"record\",\"servo\":%d,\"degree\":%u}", servo, calibrate[servo].degree );
+      Serial.printf("Recording: [%lu] %s\n", guiTimeBase, recordBuffer);
+      webSocket.broadcastTXT( recordBuffer, strlen(recordBuffer), false );
     }
 }
 
@@ -160,7 +159,7 @@ void onWebSocketEvent(uint8_t client_num,
 
     // Client has disconnected
     case WStype_DISCONNECTED:
-      clientOnline -= 1;
+      gbWSOnline = false;
       Serial.printf("[%u] Disconnected!\n", client_num);
       break;
 
@@ -170,7 +169,7 @@ void onWebSocketEvent(uint8_t client_num,
         IPAddress ip = webSocket.remoteIP(client_num);
         Serial.printf("[%u] Connection from ", client_num);
         Serial.println(ip.toString());
-        clientOnline += 1;
+        gbWSOnline = true;
       }
       break;
 
@@ -420,7 +419,7 @@ void setup() {
     delay(500);
     Serial.print(".");
   }
-  online = true;
+  
   // Print our IP address
   Serial.println("Connected!");
   Serial.print("My IP address: ");
@@ -447,7 +446,7 @@ void loop() {
   gvDuration = ((guiTimeBase - gulLastTimeBase) >= gulRecordInterval);
   webSocket.loop();
 
-  if (gvDuration && gbRecordMode) {
+  if (gbWSOnline && gvDuration && gbRecordMode) {
     servoRecordRequest();
   }
 
