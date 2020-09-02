@@ -29,12 +29,13 @@
 #define SERVO_PULSE_MAX 2500
 #define SERVO_DEGREE_MAX 270
 
-static int servoIds[MAX_SERVOS] = {0,1,2,3};
 static const int servosPins[MAX_SERVOS] = {21, 19, 23, 18};
 static const int servosPosition[MAX_SERVOS] = {32, 33, 34, 35};
-
 static const int servoMtrChannel[MAX_SERVOS] = {0, 1, 2, 3};
 static const int servoFdBKChannel[MAX_SERVOS] = {4, 5, 6, 7};
+static int servoIds[MAX_SERVOS] = {0,1,2,3};
+static int servoDegreeMax = 270;
+static int servoRecordMax = 240;
 
 volatile unsigned long guiTimeBase   = 0,      // default time base, target 0.5 seconds
                   gulLastTimeBase    = 0,      // time base delta
@@ -55,21 +56,22 @@ typedef struct _qitem {
   uint32_t current;
 } QItem, *PQItem;
 
-typedef struct _servoPosition {
-  uint32_t current;
-  uint32_t degree;
-  uint32_t minPosition;
-  uint32_t maxPosition;
-} ServoPositions, *PServoPostions;
-
 typedef union _CalibrationValue {
   uint32_t  value;
   unsigned char byte8[sizeof(uint32_t)];
 } CalibrationValue, *PCalibrationValue;
 
+typedef struct _servoCalibration {
+  CalibrationValue current;
+  CalibrationValue degree;
+  CalibrationValue minPosition;
+  CalibrationValue maxPosition;
+  CalibrationValue timeSequence;
+} ServoCalibration, *PServoCalibration;
+
 Servo servos[MAX_SERVOS];
 ESP32AnalogRead adc[MAX_SERVOS];
-ServoPositions calibrate[MAX_SERVOS];
+ServoCalibration calibrate[MAX_SERVOS];
 AsyncWebServer server(80);
 WebSocketsServer webSocket = WebSocketsServer(1337);
 WifiTool wifiTool;
@@ -95,16 +97,16 @@ void servoRecordRequest() {
     }
 
     for(int servo = 0; servo < MAX_SERVOS; ++servo) {
-      calibrate[servo].current = adc[servo].readMiliVolts();;
-      calibrate[servo].degree = map( calibrate[servo].current, calibrate[servo].minPosition, calibrate[servo].maxPosition, 0, SERVO_DEGREE_MAX);
-      if (calibrate[servo].current >= calibrate[servo].maxPosition) {
-        calibrate[servo].degree = SERVO_DEGREE_MAX;
-      } if (calibrate[servo].current <= calibrate[servo].minPosition) {
-        calibrate[servo].degree = 0;
+      calibrate[servo].current.value = adc[servo].readMiliVolts();;
+      calibrate[servo].degree.value = map( calibrate[servo].current.value, calibrate[servo].minPosition.value, calibrate[servo].maxPosition.value, 0, SERVO_DEGREE_MAX);
+      if (calibrate[servo].current.value >= calibrate[servo].maxPosition.value) {
+        calibrate[servo].degree.value = SERVO_DEGREE_MAX;
+      } if (calibrate[servo].current.value <= calibrate[servo].minPosition.value) {
+        calibrate[servo].degree.value = 0;
       } else {
-        calibrate[servo].degree = calibrate[servo].degree % (SERVO_DEGREE_MAX + 1);
+        calibrate[servo].degree.value = calibrate[servo].degree.value % (SERVO_DEGREE_MAX + 1);
       }
-      snprintf(recordBuffer, sizeof(recordBuffer), "{\"action\":\"record\",\"servo\":%d,\"degree\":%u}", servo, calibrate[servo].degree );
+      snprintf(recordBuffer, sizeof(recordBuffer), "{\"action\":\"record\",\"servo\":%d,\"degree\":%u}", servo, calibrate[servo].degree.value );
       Serial.printf("Recording: [%lu] %s\n", guiTimeBase, recordBuffer);
       webSocket.broadcastTXT( recordBuffer, strlen(recordBuffer), false );
     }
@@ -206,7 +208,7 @@ void onWebSocketEvent(uint8_t client_num,
       if ( strcmp(doc["action"], "currentState") == 0 ) { // move to neutral positon -- currentState
         Serial.printf("Current State Action \n");
         for(int i = 0; i < MAX_SERVOS; ++i) {
-          snprintf(message, sizeof(message), "{\"action\":\"state\",\"servo\":%d,\"degree\":%d}", i, calibrate[i].degree);
+          snprintf(message, sizeof(message), "{\"action\":\"state\",\"servo\":%d,\"degree\":%d}", i, calibrate[i].degree.value);
           webSocket.broadcastTXT( message, strlen(message), false );
           Serial.printf("Sending currentState=%s\n", message);
         }
@@ -310,13 +312,13 @@ void calibrateServos(long degrees) {
     vTaskDelay(500/portTICK_PERIOD_MS);
 
     for(int i = 0; i < MAX_SERVOS; ++i) {
-      calibrate[i].current = adc[i].readMiliVolts();
-      calibrate[i].minPosition = min(calibrate[i].minPosition, calibrate[i].current);
-      calibrate[i].maxPosition = max(calibrate[i].maxPosition, calibrate[i].current);
-      calibrate[i].degree = map( calibrate[i].current, calibrate[i].minPosition, calibrate[i].maxPosition, 0, SERVO_DEGREE_MAX);
+      calibrate[i].current.value = adc[i].readMiliVolts();
+      calibrate[i].minPosition.value = min(calibrate[i].minPosition.value, calibrate[i].current.value);
+      calibrate[i].maxPosition.value = max(calibrate[i].maxPosition.value, calibrate[i].current.value);
+      calibrate[i].degree.value = map( calibrate[i].current.value, calibrate[i].minPosition.value, calibrate[i].maxPosition.value, 0, SERVO_DEGREE_MAX);
       
       Serial.printf("Servo: %d,\t W-degrees: %ld,\t delayed-analog: %u,\t delayed-degrees: %u, min: %u, max: %u \n", 
-                    i, servoDegrees, calibrate[i].current, calibrate[i].degree, calibrate[i].minPosition, calibrate[i].maxPosition);
+                    i, servoDegrees, calibrate[i].current.value, calibrate[i].degree.value, calibrate[i].minPosition.value, calibrate[i].maxPosition.value);
    } 
 }
 
@@ -348,10 +350,10 @@ void servoTask(void * pServo) {
         vDelay = (int)(abs(servoDegrees - lastKnownDegrees)/60.0 * 100.0 + 50);
         vTaskDelay(vDelay/portTICK_PERIOD_MS); // 100ms/60degrees or 450ms for SERVO_DEGREE_MAX degrees
 
-        calibrate[servo].current = adc[servo].readMiliVolts();;
-        calibrate[servo].degree = map( calibrate[servo].current, calibrate[servo].minPosition, calibrate[servo].maxPosition, 0, SERVO_DEGREE_MAX);
+        calibrate[servo].current.value = adc[servo].readMiliVolts();;
+        calibrate[servo].degree.value = map( calibrate[servo].current.value, calibrate[servo].minPosition.value, calibrate[servo].maxPosition.value, 0, SERVO_DEGREE_MAX);
         Serial.printf("Servo %d analog: %u, degree: %u, stackHighwater: %d, QueueDepth: %d\n", 
-                       servo, pqi->analog, calibrate[servo].degree, uxTaskGetStackHighWaterMark(NULL), uxQueueMessagesWaiting( requestQueue ));
+                       servo, pqi->analog, calibrate[servo].degree.value, uxTaskGetStackHighWaterMark(NULL), uxQueueMessagesWaiting( requestQueue ));
       } 
       lastKnownDegrees = servoDegrees;
       heap_caps_free(pqi); // free allocation
@@ -392,8 +394,8 @@ void initializeServoControls() {
     pinMode(servosPins[i], OUTPUT);
 
     adc[i].attach(servosPosition[i]);
-    calibrate[i].minPosition = 155;
-    calibrate[i].maxPosition = 3105;
+    calibrate[i].minPosition.value = 155;
+    calibrate[i].maxPosition.value = 3105;
   
     if(!servos[i].attach(servosPins[i],servoMtrChannel[i], 0, SERVO_DEGREE_MAX, SERVO_PULSE_MIN, SERVO_PULSE_MAX )) {
       Serial.printf("Servo %d attach error! \n", i);
