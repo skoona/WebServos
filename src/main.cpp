@@ -15,20 +15,16 @@
  * button[follow,play,startRecord,stopRecord] -> if no 'degree' send(button) only
 */ 
 
-#include "Arduino.h"
-
-#include <WiFi.h>
-#include <SPIFFS.h>
-#include <ESP_WiFiManager.h>
+#include <wifiTool.h>
+#include <ArduinoJson.h>          //https://github.com/bblanchon/ArduinoJson
 #include <WebSocketsServer.h>
 
 #include <Servo.h>
 #include <ESP32AnalogRead.h>
-#include <ArduinoJson.h>
 
 #define MAX_SERVOS 4
 #define MAX_REQUEST_QUEUE_SZ 32
-#define MAX_RESPONSE_QUEUE_SZ 64
+#define MAX_RECORD_COUNT 240         // sequence, servo, degree
 #define SERVO_PULSE_MIN 500
 #define SERVO_PULSE_MAX 2500
 #define SERVO_DEGREE_MAX 270
@@ -42,14 +38,11 @@ static const int servoFdBKChannel[MAX_SERVOS] = {4, 5, 6, 7};
 
 volatile unsigned long guiTimeBase   = 0,      // default time base, target 0.5 seconds
                   gulLastTimeBase    = 0,      // time base delta
-                  gulRecordInterval  = 500;    // Ticks interval 0.5 seconds
+                  gulRecordInterval  = 500,    // Ticks interval 0.5 seconds
+                  gulRecordCounter   = 0;      // Number of recorded records
 volatile bool     gbRecordMode       = false,  // Recording
                   gvDuration         = false,  // 1/2 second marker
                   gbWSOnline = false;          // WebSocket Client Connected
-
-// Constants
-const char* ssid = "SFNSS1-24G";
-const char* password = "Apache Tomcat 8";
 
 QueueHandle_t qRequest[MAX_SERVOS];
 
@@ -69,12 +62,19 @@ typedef struct _servoPosition {
   uint32_t maxPosition;
 } ServoPositions, *PServoPostions;
 
+typedef union _CalibrationValue {
+  uint32_t  value;
+  unsigned char byte8[sizeof(uint32_t)];
+} CalibrationValue, *PCalibrationValue;
+
 Servo servos[MAX_SERVOS];
 ESP32AnalogRead adc[MAX_SERVOS];
 ServoPositions calibrate[MAX_SERVOS];
 AsyncWebServer server(80);
 WebSocketsServer webSocket = WebSocketsServer(1337);
+WifiTool wifiTool;
 
+char servo_max_value[8];     // Configuration Param
 char message[128];           // response messages
 char recordBuffer[128];      // recording entries
 char lastBuffer[128];        // filter duplicate messages
@@ -83,6 +83,17 @@ char lastBuffer[128];        // filter duplicate messages
  * Record generator
 */
 void servoRecordRequest() {
+    gulRecordCounter += 1;
+    if (gulRecordCounter > MAX_RECORD_COUNT) {
+      gbRecordMode = false;
+      gulRecordCounter = 0;
+      Serial.printf("Recording: [%lu] Limit Reached, Recording Stopped!\n", guiTimeBase);
+
+      snprintf(recordBuffer, sizeof(recordBuffer), "{\"action\":\"follow\"}" );
+      webSocket.broadcastTXT( recordBuffer, strlen(recordBuffer), false );
+      return;
+    }
+
     for(int servo = 0; servo < MAX_SERVOS; ++servo) {
       calibrate[servo].current = adc[servo].readMiliVolts();;
       calibrate[servo].degree = map( calibrate[servo].current, calibrate[servo].minPosition, calibrate[servo].maxPosition, 0, SERVO_DEGREE_MAX);
@@ -175,7 +186,7 @@ void onWebSocketEvent(uint8_t client_num,
 
     // Handle text messages from client
     case WStype_TEXT:
-      if ( strcmp((char *)payload, lastBuffer) == 0 ) { // duplicate message
+      if ( strcmp((char *)payload, lastBuffer) == 0 && strcmp((char *)payload, "{\"action\":\"currentState\"}") != 0) { // duplicate message
         Serial.printf("[%u] Duplicate Message Received text: %s\n", client_num, payload);
         break;
       } else {
@@ -257,7 +268,7 @@ void onIndexRequest(AsyncWebServerRequest *request) {
   IPAddress remote_ip = request->client()->remoteIP();
   Serial.println("[" + remote_ip.toString() +
                   "] HTTP GET request of " + request->url());
-  request->send(SPIFFS, "/index.html", "text/html");
+  request->send(SPIFFS, "/servo.html", "text/html");
 }
 void onJSRequest(AsyncWebServerRequest *request) {
   IPAddress remote_ip = request->client()->remoteIP();
@@ -368,11 +379,7 @@ void generateServoTasks() {
   }
 }
 
-void setup() {
-  Serial.begin(115200);
-
-  Serial.println("Skoona.net Multple Servos with Feedback.");
-
+void initializeServoControls() {
   servoMutex = xSemaphoreCreateMutex();
 
   for(int i = 0; i < MAX_SERVOS; ++i) {
@@ -396,6 +403,8 @@ void setup() {
 
   /*
     * Calibrate Servos
+    * - read EEPROM first
+    * - read JSON File if no EEPROM
   */
   calibrateServos(135);
   calibrateServos(0);    
@@ -403,36 +412,75 @@ void setup() {
   calibrateServos(SERVO_DEGREE_MAX);
   calibrateServos(135);
 
+}
+
+JsonObject readRecordedMovements(String jsonFilePathname) {
+  DynamicJsonDocument doc(4096);
+  if ( SPIFFS.exists(jsonFilePathname) ) {
+    //file exists, reading and loading
+    Serial.printf("Reading file: %s\n", jsonFilePathname.c_str());
+
+    File jsonFile = SPIFFS.open(jsonFilePathname, "r");
+    if (jsonFile) {
+      DeserializationError err = deserializeJson(doc, jsonFile);
+      if (err) {
+        Serial.printf("failed to load File; cause %s\n", err.c_str());
+        jsonFile.close();
+        return doc.to<JsonObject>();
+      } 
+      jsonFile.close();      
+    }
+  }
+  return doc.as<JsonObject>();
+}
+
+bool saveRecordedMovements(const uint8_t *payload, String jsonFilePathname) {
+  File jsonFile = SPIFFS.open(jsonFilePathname, "w");
+  if (!jsonFile) {
+    Serial.printf("Failed to open file: %s, for writing. \n", jsonFilePathname.c_str());
+    return false;
+  }
+
+  jsonFile.write(payload, strlen((const char *)payload));
+  jsonFile.close();
+
+  return true;
+}
+
+void setup() {
+  Serial.begin(115200);
+
+  Serial.println("Skoona.net Multple Servos with Feedback.");
+
+  /*
+   * Init Servo
+  */
+  initializeServoControls();  
   /*
    * Create Servo Handler
   */
   generateServoTasks();
 
-  // Make sure we can read the file system
-  if( !SPIFFS.begin()){
-    Serial.println("Error mounting SPIFFS");
-    while(1);
+  if (SPIFFS.begin()) {
+    Serial.println("Filesystem available!");
+  } else {
+    Serial.println("filesystem not available!");
   }
 
-  WiFi.begin(ssid, password);
-  while ( WiFi.status() != WL_CONNECTED ) {
-    delay(500);
-    Serial.print(".");
+  wifiTool.begin(false);
+  if (!wifiTool.wifiAutoConnect()) {
+    Serial.println("fail to connect to wifi!!!!");
+    wifiTool.runApPortal();
   }
-  
-  // Print our IP address
-  Serial.println("Connected!");
-  Serial.print("My IP address: ");
-  Serial.println(WiFi.localIP());
 
   // On HTTP request for root, provide index.html file
+  server.begin();
   server.on("/", HTTP_GET, onIndexRequest);
+  server.on("/servo", HTTP_GET, onIndexRequest);
   server.on("/jogDial.min.js", HTTP_GET, onJSRequest);
   server.on("/base_one_knob.png", HTTP_GET, onImgKnobRequest);
   server.on("/base_one_bg.png", HTTP_GET, onImgBgRequest);
   server.onNotFound(onPageNotFound);
-
-  server.begin();
 
   // Start WebSocket server and assign callback
   webSocket.begin();
@@ -444,6 +492,7 @@ void setup() {
 void loop() {
   guiTimeBase = millis();
   gvDuration = ((guiTimeBase - gulLastTimeBase) >= gulRecordInterval);
+
   webSocket.loop();
 
   if (gbWSOnline && gvDuration && gbRecordMode) {
@@ -451,7 +500,7 @@ void loop() {
   }
 
   if (gvDuration) { // Every half second poll 
-    gulLastTimeBase = guiTimeBase;
+    gulLastTimeBase = guiTimeBase;    
   }
 
   taskYIELD();

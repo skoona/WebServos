@@ -157,25 +157,25 @@
 			vdial0 = JogDial(document.getElementById("dial0"), opts)
 				.on("mouseup", function(event){ 
 						$('#dial0_meter div').css('width', Math.round((event.target.rotation/opts.maxDegree)*100) + '%' );
-						$('#title0').html( Math.round(event.target.degree) + '%' );
+						$('#title0').html( Math.round(event.target.degree) + '&deg;' );
 						doSend('{"action":"follow","servo":0,"degree":' + Math.floor( event.target.degree ) +'}');
 					});
 			vdial1 = JogDial(document.getElementById("dial1"), opts)
 				.on("mouseup", function(event){ 
 						$('#dial1_meter div').css('width', Math.round((event.target.rotation/opts.maxDegree)*100) + '%' );
-						$('#title1').html( Math.round(event.target.degree) + '%' );
+						$('#title1').html( Math.round(event.target.degree) + '&deg;' );
 						doSend('{"action":"follow","servo":1,"degree":' + Math.floor( event.target.degree ) +'}');
 					});
 			vdial2 = JogDial(document.getElementById("dial2"), opts)
 				.on("mouseup", function(event){ 
 						$('#dial2_meter div').css('width', Math.round((event.target.rotation/opts.maxDegree)*100) + '%' );
-						$('#title2').html( Math.round(event.target.degree) + '%' );
+						$('#title2').html( Math.round(event.target.degree) + '&deg;' );
 						doSend('{"action":"follow","servo":2,"degree":' + Math.floor( event.target.degree ) +'}');
 					});
 			vdial3 = JogDial(document.getElementById("dial3"), opts)
 				.on("mouseup", function(event){ 
 					$('#dial3_meter div').css('width', Math.round((event.target.rotation/opts.maxDegree)*100) + '%' );
-					$('#title3').html( Math.round(event.target.degree) + '%' );
+					$('#title3').html( Math.round(event.target.degree) + '&deg;' );
 					doSend('{"action":"follow","servo":3,"degree":' + Math.floor( event.target.degree ) +'}');
 				});
 
@@ -229,22 +229,22 @@
 		function updateDialPosition(package) {
 			if(package.servo == 0) {
 				vdial0.angle(package.degree); 
-				$('#title0').html( package.degree + '%' );
+				$('#title0').html( package.degree + '&deg;' );
 				$('#dial0_meter div').css('width', ( package.degree/opts.maxDegree*100 ) + '%' );
 				
 			} else if (package.servo == 1) {
 				vdial1.angle(package.degree); 
-				$('#title1').html( package.degree + '%' );
+				$('#title1').html( package.degree + '&deg;' );
 				$('#dial1_meter div').css('width', ( package.degree/opts.maxDegree*100 ) + '%' );
 
 			} else if (package.servo == 2) {
 				vdial2.angle(package.degree); 
-				$('#title2').html( package.degree + '%' );
+				$('#title2').html( package.degree + '&deg;' );
 				$('#dial2_meter div').css('width', ( package.degree/opts.maxDegree*100 ) + '%' );
 
 			} else if (package.servo == 3) {
 				vdial3.angle(package.degree); 
-				$('#title3').html( package.degree + '%' );
+				$('#title3').html( package.degree + '&deg;' );
 				$('#dial3_meter div').css('width', ( package.degree/opts.maxDegree*100 ) + '%' );
 
 			} else {
