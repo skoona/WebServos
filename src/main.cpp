@@ -21,13 +21,12 @@
 
 #include <Servo.h>
 #include <ESP32AnalogRead.h>
+#include <Preferences.h>
 
 #define MAX_SERVOS 4
 #define MAX_REQUEST_QUEUE_SZ 32
-#define MAX_RECORD_COUNT 240         // sequence, servo, degree
 #define SERVO_PULSE_MIN 500
 #define SERVO_PULSE_MAX 2500
-#define SERVO_DEGREE_MAX 270
 
 static const int servosPins[MAX_SERVOS] = {21, 19, 23, 18};
 static const int servosPosition[MAX_SERVOS] = {32, 33, 34, 35};
@@ -36,6 +35,9 @@ static const int servoFdBKChannel[MAX_SERVOS] = {4, 5, 6, 7};
 static int servoIds[MAX_SERVOS] = {0,1,2,3};
 static int servoDegreeMax = 270;
 static int servoRecordMax = 240;
+static int servoRecalibrate = 0;   // 0 = no, !0 = yes
+#define SERVO_DEGREE_MAX servoDegreeMax
+#define MAX_RECORD_COUNT servoRecordMax         // sequence, servo, degree
 
 volatile unsigned long guiTimeBase   = 0,      // default time base, target 0.5 seconds
                   gulLastTimeBase    = 0,      // time base delta
@@ -43,7 +45,8 @@ volatile unsigned long guiTimeBase   = 0,      // default time base, target 0.5 
                   gulRecordCounter   = 0;      // Number of recorded records
 volatile bool     gbRecordMode       = false,  // Recording
                   gvDuration         = false,  // 1/2 second marker
-                  gbWSOnline = false;          // WebSocket Client Connected
+                  gbWSOnline         = false,  // WebSocket Client Connected
+                  gbCalibrate        = true;   // Servo Calibration Required
 
 QueueHandle_t qRequest[MAX_SERVOS];
 
@@ -56,21 +59,21 @@ typedef struct _qitem {
   uint32_t current;
 } QItem, *PQItem;
 
-typedef union _CalibrationValue {
-  uint32_t  value;
-  unsigned char byte8[sizeof(uint32_t)];
-} CalibrationValue, *PCalibrationValue;
+typedef struct __attribute__((packed)) _valueStruct {
+  uint32_t  current;
+  uint32_t  degree;
+  uint32_t  minPosition;
+  uint32_t  maxPosition;
+}  ValueStruct;
 
-typedef struct _servoCalibration {
-  CalibrationValue current;
-  CalibrationValue degree;
-  CalibrationValue minPosition;
-  CalibrationValue maxPosition;
-  CalibrationValue timeSequence;
+typedef union __attribute__((packed)) _servoCalibration {
+    ValueStruct value;
+  unsigned char bytePayload[sizeof(ValueStruct)];
 } ServoCalibration, *PServoCalibration;
 
 Servo servos[MAX_SERVOS];
 ESP32AnalogRead adc[MAX_SERVOS];
+Preferences preferences;
 ServoCalibration calibrate[MAX_SERVOS];
 AsyncWebServer server(80);
 WebSocketsServer webSocket = WebSocketsServer(1337);
@@ -97,16 +100,16 @@ void servoRecordRequest() {
     }
 
     for(int servo = 0; servo < MAX_SERVOS; ++servo) {
-      calibrate[servo].current.value = adc[servo].readMiliVolts();;
-      calibrate[servo].degree.value = map( calibrate[servo].current.value, calibrate[servo].minPosition.value, calibrate[servo].maxPosition.value, 0, SERVO_DEGREE_MAX);
-      if (calibrate[servo].current.value >= calibrate[servo].maxPosition.value) {
-        calibrate[servo].degree.value = SERVO_DEGREE_MAX;
-      } if (calibrate[servo].current.value <= calibrate[servo].minPosition.value) {
-        calibrate[servo].degree.value = 0;
+      calibrate[servo].value.current = adc[servo].readMiliVolts();;
+      calibrate[servo].value.degree = map( calibrate[servo].value.current, calibrate[servo].value.minPosition, calibrate[servo].value.maxPosition, 0, SERVO_DEGREE_MAX);
+      if (calibrate[servo].value.current >= calibrate[servo].value.maxPosition) {
+        calibrate[servo].value.degree = SERVO_DEGREE_MAX;
+      } if (calibrate[servo].value.current <= calibrate[servo].value.minPosition) {
+        calibrate[servo].value.degree = 0;
       } else {
-        calibrate[servo].degree.value = calibrate[servo].degree.value % (SERVO_DEGREE_MAX + 1);
+        calibrate[servo].value.degree = calibrate[servo].value.degree % (SERVO_DEGREE_MAX + 1);
       }
-      snprintf(recordBuffer, sizeof(recordBuffer), "{\"action\":\"record\",\"servo\":%d,\"degree\":%u}", servo, calibrate[servo].degree.value );
+      snprintf(recordBuffer, sizeof(recordBuffer), "{\"action\":\"record\",\"servo\":%d,\"degree\":%u}", servo, calibrate[servo].value.degree );
       Serial.printf("Recording: [%lu] %s\n", guiTimeBase, recordBuffer);
       webSocket.broadcastTXT( recordBuffer, strlen(recordBuffer), false );
     }
@@ -208,7 +211,7 @@ void onWebSocketEvent(uint8_t client_num,
       if ( strcmp(doc["action"], "currentState") == 0 ) { // move to neutral positon -- currentState
         Serial.printf("Current State Action \n");
         for(int i = 0; i < MAX_SERVOS; ++i) {
-          snprintf(message, sizeof(message), "{\"action\":\"state\",\"servo\":%d,\"degree\":%d}", i, calibrate[i].degree.value);
+          snprintf(message, sizeof(message), "{\"action\":\"state\",\"servo\":%d,\"degree\":%d}", i, calibrate[i].value.degree);
           webSocket.broadcastTXT( message, strlen(message), false );
           Serial.printf("Sending currentState=%s\n", message);
         }
@@ -312,13 +315,13 @@ void calibrateServos(long degrees) {
     vTaskDelay(500/portTICK_PERIOD_MS);
 
     for(int i = 0; i < MAX_SERVOS; ++i) {
-      calibrate[i].current.value = adc[i].readMiliVolts();
-      calibrate[i].minPosition.value = min(calibrate[i].minPosition.value, calibrate[i].current.value);
-      calibrate[i].maxPosition.value = max(calibrate[i].maxPosition.value, calibrate[i].current.value);
-      calibrate[i].degree.value = map( calibrate[i].current.value, calibrate[i].minPosition.value, calibrate[i].maxPosition.value, 0, SERVO_DEGREE_MAX);
+      calibrate[i].value.current = adc[i].readMiliVolts();
+      calibrate[i].value.minPosition = min(calibrate[i].value.minPosition, calibrate[i].value.current);
+      calibrate[i].value.maxPosition = max(calibrate[i].value.maxPosition, calibrate[i].value.current);
+      calibrate[i].value.degree = map( calibrate[i].value.current, calibrate[i].value.minPosition, calibrate[i].value.maxPosition, 0, SERVO_DEGREE_MAX);
       
       Serial.printf("Servo: %d,\t W-degrees: %ld,\t delayed-analog: %u,\t delayed-degrees: %u, min: %u, max: %u \n", 
-                    i, servoDegrees, calibrate[i].current.value, calibrate[i].degree.value, calibrate[i].minPosition.value, calibrate[i].maxPosition.value);
+                    i, servoDegrees, calibrate[i].value.current, calibrate[i].value.degree, calibrate[i].value.minPosition, calibrate[i].value.maxPosition);
    } 
 }
 
@@ -350,10 +353,10 @@ void servoTask(void * pServo) {
         vDelay = (int)(abs(servoDegrees - lastKnownDegrees)/60.0 * 100.0 + 50);
         vTaskDelay(vDelay/portTICK_PERIOD_MS); // 100ms/60degrees or 450ms for SERVO_DEGREE_MAX degrees
 
-        calibrate[servo].current.value = adc[servo].readMiliVolts();;
-        calibrate[servo].degree.value = map( calibrate[servo].current.value, calibrate[servo].minPosition.value, calibrate[servo].maxPosition.value, 0, SERVO_DEGREE_MAX);
+        calibrate[servo].value.current = adc[servo].readMiliVolts();;
+        calibrate[servo].value.degree = map( calibrate[servo].value.current, calibrate[servo].value.minPosition, calibrate[servo].value.maxPosition, 0, SERVO_DEGREE_MAX);
         Serial.printf("Servo %d analog: %u, degree: %u, stackHighwater: %d, QueueDepth: %d\n", 
-                       servo, pqi->analog, calibrate[servo].degree.value, uxTaskGetStackHighWaterMark(NULL), uxQueueMessagesWaiting( requestQueue ));
+                       servo, pqi->analog, calibrate[servo].value.degree, uxTaskGetStackHighWaterMark(NULL), uxQueueMessagesWaiting( requestQueue ));
       } 
       lastKnownDegrees = servoDegrees;
       heap_caps_free(pqi); // free allocation
@@ -383,36 +386,56 @@ void generateServoTasks() {
 
 void initializeServoControls() {
   servoMutex = xSemaphoreCreateMutex();
+  gbCalibrate = preferences.begin("Calibration", false);
+   if ( gbCalibrate ) {
+     Serial.println("Configuration Preferences Opened!");
+      if (preferences.getBytes("Servos", &calibrate, sizeof(calibrate)) > 0 ) {
+        servoRecalibrate = 0;   // exists  
+        Serial.println("Servos Preferences Read!");
+      } else {
+        servoRecalibrate = 1;   // not saved, redo
+        Serial.println("Servo Preferences Not Found");
+      }
+   }
 
-  for(int i = 0; i < MAX_SERVOS; ++i) {
-    qRequest[i] = xQueueCreate( MAX_REQUEST_QUEUE_SZ, sizeof( PQItem ) );
-    if(qRequest[i] == NULL) {
-      Serial.printf("Error creating the request queue %d \n", i);
-    }
-      
-    pinMode(servosPosition[i], INPUT);
-    pinMode(servosPins[i], OUTPUT);
+  if (servoRecalibrate == 1) {
+    for(int i = 0; i < MAX_SERVOS; ++i) {
+      qRequest[i] = xQueueCreate( MAX_REQUEST_QUEUE_SZ, sizeof( PQItem ) );
+      if(qRequest[i] == NULL) {
+        Serial.printf("Error creating the request queue %d \n", i);
+      }
+        
+      pinMode(servosPosition[i], INPUT);
+      pinMode(servosPins[i], OUTPUT);
 
-    adc[i].attach(servosPosition[i]);
-    calibrate[i].minPosition.value = 155;
-    calibrate[i].maxPosition.value = 3105;
-  
-    if(!servos[i].attach(servosPins[i],servoMtrChannel[i], 0, SERVO_DEGREE_MAX, SERVO_PULSE_MIN, SERVO_PULSE_MAX )) {
-      Serial.printf("Servo %d attach error! \n", i);
+      adc[i].attach(servosPosition[i]);
+      calibrate[i].value.minPosition = 155;
+      calibrate[i].value.maxPosition = 3105;
+    
+      if(!servos[i].attach(servosPins[i],servoMtrChannel[i], 0, SERVO_DEGREE_MAX, SERVO_PULSE_MIN, SERVO_PULSE_MAX )) {
+        Serial.printf("Servo %d attach error! \n", i);
+      }
     }
-    gbRecordMode = false;
+    /*
+      * Calibrate Servos
+    */
+    calibrateServos(135);
+    calibrateServos(0);    
+    calibrateServos(135);
+    calibrateServos(SERVO_DEGREE_MAX);
+    calibrateServos(135);
+
+    if (gbCalibrate) {
+      Serial.println("Saving Servo Calibration!");
+      size_t value = preferences.putBytes("Servos", &calibrate, sizeof(calibrate));
+      Serial.printf("Saved %d bytes! \n", value);  
+    }
   }
 
-  /*
-    * Calibrate Servos
-    * - read EEPROM first
-    * - read JSON File if no EEPROM
-  */
-  calibrateServos(135);
-  calibrateServos(0);    
-  calibrateServos(135);
-  calibrateServos(SERVO_DEGREE_MAX);
-  calibrateServos(135);
+  if (gbCalibrate) {
+    preferences.end();
+  }
+  gbRecordMode = false;
 
 }
 

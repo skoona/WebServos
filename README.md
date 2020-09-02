@@ -29,4 +29,13 @@ SPIFFS oriented AsyncWebServer based wifi configuration tool.  This library was 
 
 [WebSocket Server and Client for Arduino](https://github.com/Links2004/arduinoWebSockets)
 
-more to come
+Library Storage: ./PlatformIO/Projects/WebServos/.pio/libdeps/lolin32
+    Updating ArduinoJson                     @ 6.16.1         [Up-to-date]
+    Updating AsyncTCP                        @ 1.1.1          [Up-to-date]
+    Updating ESP Async WebServer             @ 1.2.3          [Up-to-date]
+    Updating ESP32AnalogRead                 @ 0.0.5          [Up-to-date]
+    Updating ESPAsyncTCP                     @ 1.2.2          [Up-to-date]
+    Updating ServoESP32                      @ 1.0.3          [Up-to-date]
+    Updating WebSockets                      @ 2.2.1          [Up-to-date]
+    Updating wifi Tool                       @ b02f893        [Up-to-date]
+
