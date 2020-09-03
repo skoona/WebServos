@@ -16,7 +16,7 @@ Features:
 ## ESP32 Board
 LOLIN32 V1.0.0 WiFi + bluetooth Module ESP-32 4MB FLASH Development Board
 
-#### Key Libraries
+## Key Libraries
 
 [ESP8266 & ESP32 wifi tool](https://github.com/oferzv/wifiTool)
 
@@ -30,6 +30,7 @@ SPIFFS oriented AsyncWebServer based wifi configuration tool.  This library was 
 [WebSocket Server and Client for Arduino](https://github.com/Links2004/arduinoWebSockets)
 
 Library Storage: ./PlatformIO/Projects/WebServos/.pio/libdeps/lolin32
+
     Updating ArduinoJson                     @ 6.16.1         [Up-to-date]
     Updating AsyncTCP                        @ 1.1.1          [Up-to-date]
     Updating ESP Async WebServer             @ 1.2.3          [Up-to-date]

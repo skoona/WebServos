@@ -5,20 +5,36 @@
 <html>
 
 <head>
-	<title>ESP8266 & ESP32 Management Portal - OTA</title>
-	<script src='/jquery.min.js'></script>  <!-- https://ajax.googleapis.com/ajax/libs/jquery/3.2.1 -->
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta charset="utf-8" />
+    <title>ESP32 Management Portal</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" type="text/css" href="mini-default.css" media="screen"/>
+    <script async src="jquery.min.js" type="text/javascript"></script>
 </head>
 <body>
-<div>
-<h1>ESP8266 & ESP32 Management Portal - OTA</h1>
-<BR><BR>
-<form method='POST' action='wifi_spiffs_admin.html' enctype='multipart/form-data' id='upload_form'>
-   <input type='file' name='update'>
-        <input type='submit' value='Update'>
-    </form>
- <div id='prg'>progress: 0%</div>
- 
- 
+<header class="sticky">
+    <a href="#" class="logo">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" aria-hidden="true" class="mr-2" viewBox="0 0 24 24" focusable="false"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+    </a>
+    <a href="#" class="button"><strong>WebServos</strong></a>
+</header>
+
+<div class="container">
+    <div class="row">
+        <div class="col-md-8 col-md-offset-2">
+            <h1>Management Portal </h1>
+
+            <form method='POST' action='wifi_spiffs_admin.html' enctype='multipart/form-data' id='upload_form'>
+                <fieldset>
+                    <legend>OTA Admin</legend>
+                    <input type='file' name='update'>
+                    <input type='submit' value='Update'>
+                </fieldset>
+            </form>
+            <div id='prg'>progress: 0%</div>
+        </div>
+    </div>
 </div>
 
 

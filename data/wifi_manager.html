@@ -3,7 +3,12 @@
 
 <html>
 <head>
-	<title>ESP8266 & ESP32 Management Portal</title>
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<meta charset="utf-8" />
+	<title>ESP32 Management Portal</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<link rel="stylesheet" type="text/css" href="mini-default.css" media="screen"/>
+	<script async src="jquery.min.js" type="text/javascript"></script>
 
 <script>
 function getWifiScanJson() {
@@ -63,36 +68,69 @@ function getSecretJson() {
 
 
 <body>
+	<header class="sticky">
+		<a href="#" class="logo">
+			<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" aria-hidden="true" class="mr-2" viewBox="0 0 24 24" focusable="false"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+		</a>
+		<a href="#" class="button"><strong>WebServos</strong></a>
+	</header>
 
-<h1><b>ESP8266 & ESP32 Management Portal - WiFi Setup</b></h1><BR>
+	<div class="container">
+		<div class="row">
+			<div class="col-md-8 col-md-offset-2">
+				<h1>Management Portal</h1>
 
-<form action="/saveSecret/" method="POST" >
-	<label>ssid1:</label>
-	<input type="text" id="ssid1" name="ssid1" maxlength="32" size="16">
-	<label>password1:</label>
-	<input type="password" id="pass1" name="pass1"  maxlength="64" size="16">
-	<!-- An element to toggle between password visibility -->
-	<input type="checkbox" onclick="showPassword('pass1')">Show Password
-	<BR>
-	<label>ssid2:</label>
-	<input type="text" id="ssid2" name="ssid2" maxlength="32" size="16">
-	<label>password2:</label>
-	<input type="password" id="pass2" name="pass2" maxlength="64" size="16">
-	<!-- An element to toggle between password visibility -->
-	<input type="checkbox" onclick="showPassword('pass2')">Show Password
-	<BR>
-	<label>ssid3:</label>
-	<input type="text" id="ssid3" name="ssid3" maxlength="32" size="16">
-	<label>password3:</label>
-	<input type="password" id="pass3" name="pass3"  maxlength="64" size="16">
-	<input type="checkbox" onclick="showPassword('pass3')">Show Password
-	<BR>
-	<!-- Clear form -->
-	<input type="reset" value="Clear"/>
-	<input type="submit" value="Save"/>
-</form>
-<button onClick="getWifiScanJson()">Wifi Scan</button>
-<div id="wifilist"></div>
+				<form action="/saveSecret/" method="POST" >
+					<fieldset>
+						<legend>WiFi Admin</legend>
+						<div class="row">
+							<div class="col-md-4">
+								<div class="input-group vertical">
+									<label for="ssid1">ssid1:</label>
+									<input type="text" id="ssid1" name="ssid1" maxlength="32" size="16">
+									<label for="pass1">password1:</label>
+									<input type="password" id="pass1" name="pass1"  maxlength="64" size="16">
+									<!-- An element to toggle between password visibility -->
+									<label for="cb1">
+										<input id="cb1" type="checkbox" onclick="showPassword('pass1')">Show Password
+									</label>
+								</div>
+							</div>
+							<div class="col-md-4">
+								<div class="input-group vertical">
+									<label for="ssid2">ssid2:</label>
+									<input type="text" id="ssid2" name="ssid2" maxlength="32" size="16">
+									<label for="pass2">password2:</label>
+									<input type="password" id="pass2" name="pass2" maxlength="64" size="16">
+									<!-- An element to toggle between password visibility -->
+									<label for="cb2">
+										<input id="cb2" type="checkbox" onclick="showPassword('pass2')">Show Password
+									</label>
+								</div>
+							</div>
+							<div class="col-md-4">
+								<div class="input-group vertical">
+									<label for="ssid3">ssid3:</label>
+									<input type="text" id="ssid3" name="ssid3" maxlength="32" size="16">
+									<label for="pass3">password3:</label>
+									<input type="password" id="pass3" name="pass3"  maxlength="64" size="16">
+									<label for="cb3">
+										<input id="cb3" type="checkbox" onclick="showPassword('pass3')">Show Password
+									</label>
+								</div>
+							</div>
+						</div>
+						<!-- Clear form -->
+						<input class="button inverse" type="reset" value="Clear"/>
+						<input class="button large primary" type="submit" value="Save"/>
+					</fieldset>
+				</form>
+				<button class="button large tertiary" onClick="getWifiScanJson()">Wifi Scan</button>
+				<div id="wifilist"></div>
+			</div>
+		</div>
+	</div>
+
 <script>
 getSecretJson();
 </script>

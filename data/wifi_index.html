@@ -4,24 +4,25 @@
 <head>
 	<meta http-equiv="X-UA-Compatible" content="IE=edge">
 	<meta charset="utf-8" />
-	<title>ESP8266 & ESP32 Management Portal</title>
+	<title>ESP32 Management Portal</title>
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<link rel="stylesheet" type="text/css" href="mini-default.css" media="screen"/>
 	<script async src="jquery.min.js" type="text/javascript"></script>
 </head>
 
 <body>
-	<header>
-			<a href="#" class="logo">
-				<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" aria-hidden="true" class="mr-2" viewBox="0 0 24 24" focusable="false"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
-			</a>
-			<a href="#" class="button"><strong>WebServos</strong></a>
+	<header class="sticky">
+		<a href="#" class="logo">
+			<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" aria-hidden="true" class="mr-2" viewBox="0 0 24 24" focusable="false"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+		</a>
+		<a href="#" class="button"><strong>WebServos</strong></a>
 	</header>
+
 	<div class="container">
 		<div class="row">
 			<div class="col-md-6 col-md-offset-3">
 				<div class="card large">
-					<h1 class="center">ESP32 Management Portal</h1>
+					<h1 class="center">Management Portal</h1>
 
 					<button class="rounded primary" onclick= "window.location.href = '/wifi_manager.html'"> Wifi Setup </button>
 					<button onclick= "window.location.href = '/wifi_upload.html'"> OTA </button>
