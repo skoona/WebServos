@@ -6,19 +6,10 @@
 		<title>Web Controlled Servos</title>
 		<meta name="viewport" content="width=device-width, initial-scale=1">
 
-		<!--[if lt IE 9]>
-		<script src="//cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.2/html5shiv.min.js"></script>
-		<script src="//cdnjs.cloudflare.com/ajax/libs/respond.js/1.4.2/respond.min.js"></script>
-		<![endif]-->
-		<!-- CSS only -->
-		<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" integrity="sha384-JcKb8q3iqJ61gNV9KGb8thSsNjpSL0n8PARn9HuZOnIxN0hoP+VmmDGMN5t9UJ0Z" crossorigin="anonymous">
-
-		<!-- JS, Popper.js, and jQuery -->
-		<script src="https://code.jquery.com/jquery-3.5.1.slim.min.js" integrity="sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj" crossorigin="anonymous"></script>
-		<script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js" integrity="sha384-9/reFTGAW83EW2RDu2S0VKaIzap3H66lZH81PoYlFhbGU+6BZp6G7niu735Sk7lN" crossorigin="anonymous"></script>
-		<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js" integrity="sha384-B4gt1jrGC7Jh4AgTPSdUtOBvfO8shuf57BaghqFfPlYxofvL8/KUEfYiJOMMV+rV" crossorigin="anonymous"></script>
+		<link rel="stylesheet" type="text/css" href="mini-default.css" media="screen"/>
+		<script async src="jquery.min.js" type="text/javascript"></script>
+		<script async src="jogDial.min.js" type="text/javascript"></script>
 		
-		<script src="jogDial.min.js" type="text/javascript"></script>
 		<style>
 			.dial {
 				display: block;
@@ -74,63 +65,72 @@
 	</head>
 
 <body>
-	<header>
-		<div class="navbar navbar-dark bg-dark shadow-sm">
-			<div class="container d-flex justify-content-between">
-				<a href="#" class="navbar-brand d-flex align-items-center">
-				<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" aria-hidden="true" class="mr-2" viewBox="0 0 24 24" focusable="false"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
-				<strong>WebServos</strong>
-				</a>
-				<button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarHeader" aria-controls="navbarHeader" aria-expanded="false" aria-label="Toggle navigation">
-				<span class="navbar-toggler-icon"></span>
-				</button>
-			</div>
-		</div>
+	<header class="sticky">
+			<nav>
+				<label for="drawer-control" class="drawer-toggle"></label>
+				<input type="checkbox" id="drawer-control" class="drawer">
+				<div>
+						<a href="#" class="logo">
+							<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" aria-hidden="true" class="mr-2" viewBox="0 0 24 24" focusable="false"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+							<strong>WebServos</strong>
+						</a>
+						<label for="drawer-control" class="drawer-close"></label>
+						<a href="#">Home</a>
+					</div>
+			</nav>
 	</header>
+
 	<div class="container">
 
 		<div class="dials row" id="dials">
+
 			<div class="col-md-2">
-				<div class="btn-group-lg btn-group-vertical btn-group-toggle btn-block actions" data-toggle="buttons">
-						<label class="btn btn-lg btn-outline-secondary active">
-							<input type="radio" name="follow" id="follow" autocomplete="off" onclick="handleMode(this);" checked>Follow
-						</label>
-						<label class="btn btn-lg btn-outline-secondary">
-							<input type="radio" name="play" id="play" autocomplete="off" onclick="handleMode(this);">Play
-						</label>
-						<label class="btn btn-lg btn-outline-secondary">
-							<input type="radio" name="startRecord" id="start" autocomplete="off" onclick="handleMode(this);">Record
-						</label>
-						<label class="btn btn-lg btn-outline-secondary">
-							<input type="radio" name="stopRecord" id="stop" autocomplete="off" onclick="handleMode(this);">Stop Recording
-						</label>
+				<div class="row">
+					<div class="card">
+						<h4 class="text-center">Actions</h4>
+						<div class="input-group vertical" data-toggle="buttons">
+								<label class="button rounded active">
+									<input type="radio" name="actions" id="follow" autocomplete="off" onclick="handleMode(this);" checked>Follow
+								</label>
+								<label class="button rounded">
+									<input type="radio" name="actions" id="play" autocomplete="off" onclick="handleMode(this);">Play
+								</label>
+								<label class="button rounded">
+									<input type="radio" name="actions" id="startRecord" autocomplete="off" onclick="handleMode(this);">Record
+								</label>
+								<label class="button rounded">
+									<input type="radio" name="actions" id="stopRecord" autocomplete="off" onclick="handleMode(this);">Stop Recording
+								</label>
+						</div>
+					</div>
 				</div>
 			</div>
 
 			<div class="col-md-10">
 				<div class="row">
-					<div class="well well-lg col-md-6">
-						<h4 class="text-center">Servo 0 <br/><small class="text-muted" id="title0"></small></h4>
+					<div class="card col-md-6">
+						<h4 class="text-center">Servo 0 <small class="text-muted" id="title0"></small></h4>
 						<div class="dial" data-servo="0" data-degrees="0" id="dial0"></div>
 						<div id="dial0_meter"><div></div></div>				
 					</div>
-					<div class="well well-lg col-md-6">
+					<div class="card col-md-6">
 						<h4 class="text-center">Servo 1<br/><small class="text-muted" id="title1"></small></h4>
 						<div class="dial" data-servo="1" data-degrees="0" id="dial1"></div>					
 						<div id="dial1_meter"><div></div></div>
 					</div>
-					<div class="well well-lg col-md-6">
+					<div class="card col-md-6">
 						<h4 class="text-center">Servo 2<br/><small class="text-muted" id="title2"></small></h4>
 						<div class="dial" data-servo="2" data-degrees="0" id="dial2"></div>
 						<div id="dial2_meter"><div></div></div>
 					</div>
-					<div class="well well-lg col-md-6">
+					<div class="card col-md-6">
 						<h4 class="text-center">Servo 3<br/><small class="text-muted" id="title3"></small></h4>
 						<div class="dial" data-servo="3" data-degrees="0" id="dial3"></div>
 						<div class="meter" id="dial3_meter"><div></div></div>
 					</div>
 				</div>
 			</div>
+
 		</div>
 
 	</div>
@@ -187,7 +187,7 @@
 
 		function handleMode(id) {
 			// '{"action":"follow|play|startRecord|stopRecord"}'
-			doSend('{"action":"' + id.name + '"}')
+			doSend('{"action":"' + id + '"}')
 		}
 
 		// Call this to connect to the WebSocket server

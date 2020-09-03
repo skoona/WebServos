@@ -272,6 +272,18 @@ void onIndexRequest(AsyncWebServerRequest *request) {
                   "] HTTP GET request of " + request->url());
   request->send(SPIFFS, "/servo.html", "text/html");
 }
+void onCSSRequest(AsyncWebServerRequest *request) {
+  IPAddress remote_ip = request->client()->remoteIP();
+  Serial.println("[" + remote_ip.toString() +
+                  "] HTTP GET request of " + request->url());
+  request->send(SPIFFS, "/mini-default.css", "text/css");
+}
+void onJS2Request(AsyncWebServerRequest *request) {
+  IPAddress remote_ip = request->client()->remoteIP();
+  Serial.println("[" + remote_ip.toString() +
+                  "] HTTP GET request of " + request->url());
+  request->send(SPIFFS, "/jquery.min.js", "text/javascript");
+}
 void onJSRequest(AsyncWebServerRequest *request) {
   IPAddress remote_ip = request->client()->remoteIP();
   Serial.println("[" + remote_ip.toString() +
@@ -500,8 +512,9 @@ void initializeUI(){
   // On HTTP request for root, provide index.html file
   // sServer.reset(); // begin();
   sServer.serveStatic("/", SPIFFS, "/").setDefaultFile("servo.html");  
-  // sServer.on("/", HTTP_GET, onIndexRequest);
   sServer.on("/servo", HTTP_GET, onIndexRequest);
+  sServer.on("/jquery.min.js", HTTP_GET, onJS2Request);
+  sServer.on("/mini-default.css", HTTP_GET, onCSSRequest);
   sServer.on("/jogDial.min.js", HTTP_GET, onJSRequest);
   sServer.on("/base_one_knob.png", HTTP_GET, onImgKnobRequest);
   sServer.on("/base_one_bg.png", HTTP_GET, onImgBgRequest);
