@@ -35,7 +35,6 @@ static const int servoFdBKChannel[MAX_SERVOS] = {4, 5, 6, 7};
 static int servoIds[MAX_SERVOS] = {0,1,2,3};
 static int servoDegreeMax = 270;
 static int servoRecordMax = 240;
-static int servoRecalibrate = 0;   // 0 = no, !0 = yes
 #define SERVO_DEGREE_MAX servoDegreeMax
 #define MAX_RECORD_COUNT servoRecordMax         // sequence, servo, degree
 
@@ -46,38 +45,36 @@ volatile unsigned long guiTimeBase   = 0,      // default time base, target 0.5 
 volatile bool     gbRecordMode       = false,  // Recording
                   gvDuration         = false,  // 1/2 second marker
                   gbWSOnline         = false,  // WebSocket Client Connected
-                  gbCalibrate        = true;   // Servo Calibration Required
+                  gbCalibrate        = true,   // Servo Calibration Required
+                  gbServoCalibrate   = true;   // isCalibration Required
 
 QueueHandle_t qRequest[MAX_SERVOS];
 
 volatile SemaphoreHandle_t servoMutex;
 
 typedef struct _qitem {
-  int servo;
-  int degree;
-  uint32_t analog;
-  uint32_t current;
+  uint32_t servo;
+  uint32_t degree;
+  uint32_t timeSequence;
 } QItem, *PQItem;
 
-typedef struct __attribute__((packed)) _valueStruct {
+typedef struct __attribute__((packed)) _servoCalibration {
   uint32_t  current;
   uint32_t  degree;
   uint32_t  minPosition;
   uint32_t  maxPosition;
-}  ValueStruct;
+}  ServoCalibration, *PServoCalibration;
 
-typedef union __attribute__((packed)) _servoCalibration {
-    ValueStruct value;
-  unsigned char bytePayload[sizeof(ValueStruct)];
-} ServoCalibration, *PServoCalibration;
+
+WifiTool wifiTool;
+AsyncWebServer sServer(80);
+WebSocketsServer webSocket = WebSocketsServer(1337);
 
 Servo servos[MAX_SERVOS];
 ESP32AnalogRead adc[MAX_SERVOS];
+
 Preferences preferences;
 ServoCalibration calibrate[MAX_SERVOS];
-AsyncWebServer server(80);
-WebSocketsServer webSocket = WebSocketsServer(1337);
-WifiTool wifiTool;
 
 char servo_max_value[8];     // Configuration Param
 char message[128];           // response messages
@@ -100,16 +97,16 @@ void servoRecordRequest() {
     }
 
     for(int servo = 0; servo < MAX_SERVOS; ++servo) {
-      calibrate[servo].value.current = adc[servo].readMiliVolts();;
-      calibrate[servo].value.degree = map( calibrate[servo].value.current, calibrate[servo].value.minPosition, calibrate[servo].value.maxPosition, 0, SERVO_DEGREE_MAX);
-      if (calibrate[servo].value.current >= calibrate[servo].value.maxPosition) {
-        calibrate[servo].value.degree = SERVO_DEGREE_MAX;
-      } if (calibrate[servo].value.current <= calibrate[servo].value.minPosition) {
-        calibrate[servo].value.degree = 0;
+      calibrate[servo].current = adc[servo].readMiliVolts();;
+      calibrate[servo].degree = map( calibrate[servo].current, calibrate[servo].minPosition, calibrate[servo].maxPosition, 0, SERVO_DEGREE_MAX);
+      if (calibrate[servo].current >= calibrate[servo].maxPosition) {
+        calibrate[servo].degree = SERVO_DEGREE_MAX;
+      } if (calibrate[servo].current <= calibrate[servo].minPosition) {
+        calibrate[servo].degree = 0;
       } else {
-        calibrate[servo].value.degree = calibrate[servo].value.degree % (SERVO_DEGREE_MAX + 1);
+        calibrate[servo].degree = calibrate[servo].degree % (SERVO_DEGREE_MAX + 1);
       }
-      snprintf(recordBuffer, sizeof(recordBuffer), "{\"action\":\"record\",\"servo\":%d,\"degree\":%u}", servo, calibrate[servo].value.degree );
+      snprintf(recordBuffer, sizeof(recordBuffer), "{\"action\":\"record\",\"servo\":%d,\"degree\":%u}", servo, calibrate[servo].degree );
       Serial.printf("Recording: [%lu] %s\n", guiTimeBase, recordBuffer);
       webSocket.broadcastTXT( recordBuffer, strlen(recordBuffer), false );
     }
@@ -211,7 +208,7 @@ void onWebSocketEvent(uint8_t client_num,
       if ( strcmp(doc["action"], "currentState") == 0 ) { // move to neutral positon -- currentState
         Serial.printf("Current State Action \n");
         for(int i = 0; i < MAX_SERVOS; ++i) {
-          snprintf(message, sizeof(message), "{\"action\":\"state\",\"servo\":%d,\"degree\":%d}", i, calibrate[i].value.degree);
+          snprintf(message, sizeof(message), "{\"action\":\"state\",\"servo\":%d,\"degree\":%d}", i, calibrate[i].degree);
           webSocket.broadcastTXT( message, strlen(message), false );
           Serial.printf("Sending currentState=%s\n", message);
         }
@@ -315,13 +312,13 @@ void calibrateServos(long degrees) {
     vTaskDelay(500/portTICK_PERIOD_MS);
 
     for(int i = 0; i < MAX_SERVOS; ++i) {
-      calibrate[i].value.current = adc[i].readMiliVolts();
-      calibrate[i].value.minPosition = min(calibrate[i].value.minPosition, calibrate[i].value.current);
-      calibrate[i].value.maxPosition = max(calibrate[i].value.maxPosition, calibrate[i].value.current);
-      calibrate[i].value.degree = map( calibrate[i].value.current, calibrate[i].value.minPosition, calibrate[i].value.maxPosition, 0, SERVO_DEGREE_MAX);
+      calibrate[i].current = adc[i].readMiliVolts();
+      calibrate[i].minPosition = min(calibrate[i].minPosition, calibrate[i].current);
+      calibrate[i].maxPosition = max(calibrate[i].maxPosition, calibrate[i].current);
+      calibrate[i].degree = map( calibrate[i].current, calibrate[i].minPosition, calibrate[i].maxPosition, 0, SERVO_DEGREE_MAX);
       
       Serial.printf("Servo: %d,\t W-degrees: %ld,\t delayed-analog: %u,\t delayed-degrees: %u, min: %u, max: %u \n", 
-                    i, servoDegrees, calibrate[i].value.current, calibrate[i].value.degree, calibrate[i].value.minPosition, calibrate[i].value.maxPosition);
+                    i, servoDegrees, calibrate[i].current, calibrate[i].degree, calibrate[i].minPosition, calibrate[i].maxPosition);
    } 
 }
 
@@ -353,10 +350,10 @@ void servoTask(void * pServo) {
         vDelay = (int)(abs(servoDegrees - lastKnownDegrees)/60.0 * 100.0 + 50);
         vTaskDelay(vDelay/portTICK_PERIOD_MS); // 100ms/60degrees or 450ms for SERVO_DEGREE_MAX degrees
 
-        calibrate[servo].value.current = adc[servo].readMiliVolts();;
-        calibrate[servo].value.degree = map( calibrate[servo].value.current, calibrate[servo].value.minPosition, calibrate[servo].value.maxPosition, 0, SERVO_DEGREE_MAX);
+        calibrate[servo].current = adc[servo].readMiliVolts();;
+        calibrate[servo].degree = map( calibrate[servo].current, calibrate[servo].minPosition, calibrate[servo].maxPosition, 0, SERVO_DEGREE_MAX);
         Serial.printf("Servo %d analog: %u, degree: %u, stackHighwater: %d, QueueDepth: %d\n", 
-                       servo, pqi->analog, calibrate[servo].value.degree, uxTaskGetStackHighWaterMark(NULL), uxQueueMessagesWaiting( requestQueue ));
+                       servo, calibrate[servo].current, calibrate[servo].degree, uxTaskGetStackHighWaterMark(NULL), uxQueueMessagesWaiting( requestQueue ));
       } 
       lastKnownDegrees = servoDegrees;
       heap_caps_free(pqi); // free allocation
@@ -368,7 +365,10 @@ void servoTask(void * pServo) {
   vTaskDelete( NULL );
 }
 
-void generateServoTasks() {
+/*
+ * Create Servo Handler
+*/
+void initializeServoTasks() {
   static char const *pchTitle[4] = {"ServoTask-00", "ServoTask-01", "ServoTask-02", "ServoTask-03"};
 
   for(int servo = 0; servo < MAX_SERVOS; ++servo) {
@@ -382,23 +382,30 @@ void generateServoTasks() {
         tskNO_AFFINITY     // Run on any available core
       );
   }
+  Serial.println("initializeServoTasks() Exited!");
 }
 
 void initializeServoControls() {
-  servoMutex = xSemaphoreCreateMutex();
-  gbCalibrate = preferences.begin("Calibration", false);
-   if ( gbCalibrate ) {
-     Serial.println("Configuration Preferences Opened!");
-      if (preferences.getBytes("Servos", &calibrate, sizeof(calibrate)) > 0 ) {
-        servoRecalibrate = 0;   // exists  
-        Serial.println("Servos Preferences Read!");
-      } else {
-        servoRecalibrate = 1;   // not saved, redo
-        Serial.println("Servo Preferences Not Found");
-      }
-   }
+  size_t size = 0;
 
-  if (servoRecalibrate == 1) {
+  servoMutex = xSemaphoreCreateMutex();
+
+  gbCalibrate = preferences.begin("Calibration", false);
+  if ( gbCalibrate ) {
+    Serial.println("Servo Calibration Preferences Opened!");
+    size = preferences.getBytes("Servos", &calibrate, sizeof(calibrate));
+    if (size > 0 ) {
+      servoDegreeMax = preferences.getInt("DegreeMax", servoDegreeMax);
+      servoRecordMax = preferences.getInt("RecordMax", servoRecordMax);
+      gbServoCalibrate = false;   // exists  
+      Serial.printf("Servos Preferences Read %d bytes.\n", size);
+    } else {
+      gbServoCalibrate = true;   // not saved, redo
+      Serial.println("Servo Preferences Not Found");
+    }
+  }
+
+  if (gbServoCalibrate) {
     for(int i = 0; i < MAX_SERVOS; ++i) {
       qRequest[i] = xQueueCreate( MAX_REQUEST_QUEUE_SZ, sizeof( PQItem ) );
       if(qRequest[i] == NULL) {
@@ -409,8 +416,8 @@ void initializeServoControls() {
       pinMode(servosPins[i], OUTPUT);
 
       adc[i].attach(servosPosition[i]);
-      calibrate[i].value.minPosition = 155;
-      calibrate[i].value.maxPosition = 3105;
+      calibrate[i].minPosition = 155;
+      calibrate[i].maxPosition = 3105;
     
       if(!servos[i].attach(servosPins[i],servoMtrChannel[i], 0, SERVO_DEGREE_MAX, SERVO_PULSE_MIN, SERVO_PULSE_MAX )) {
         Serial.printf("Servo %d attach error! \n", i);
@@ -427,16 +434,23 @@ void initializeServoControls() {
 
     if (gbCalibrate) {
       Serial.println("Saving Servo Calibration!");
-      size_t value = preferences.putBytes("Servos", &calibrate, sizeof(calibrate));
-      Serial.printf("Saved %d bytes! \n", value);  
+      size = preferences.putBytes("Servos", &calibrate, sizeof(calibrate));
+        preferences.putInt("DegreeMax", servoDegreeMax);
+        preferences.putInt("RecordMax", servoRecordMax);
+      Serial.printf("Saved %d bytes! \n", size);  
     }
+    Serial.println("Servo Calibration Completed!");
   }
 
   if (gbCalibrate) {
     preferences.end();
+    Serial.println("Servo Calibration Preferences Closed!");
   }
   gbRecordMode = false;
 
+  initializeServoTasks();
+
+  Serial.println("initializeServoControls() Exited!");
 }
 
 JsonObject readRecordedMovements(String jsonFilePathname) {
@@ -472,44 +486,50 @@ bool saveRecordedMovements(const uint8_t *payload, String jsonFilePathname) {
   return true;
 }
 
-void setup() {
-  Serial.begin(115200);
-
-  Serial.println("Skoona.net Multple Servos with Feedback.");
-
-  /*
-   * Init Servo
-  */
-  initializeServoControls();  
-  /*
-   * Create Servo Handler
-  */
-  generateServoTasks();
-
-  if (SPIFFS.begin()) {
-    Serial.println("Filesystem available!");
-  } else {
-    Serial.println("filesystem not available!");
-  }
-
+void InitializeWiFi() {
   wifiTool.begin(false);
   if (!wifiTool.wifiAutoConnect()) {
     Serial.println("fail to connect to wifi!!!!");
     wifiTool.runApPortal();
   }
+  Serial.println("InitializeWiFi() Exited!");
+}
 
+void initializeUI(){
+  Serial.println("Starting Primary Operations");
   // On HTTP request for root, provide index.html file
-  server.begin();
-  server.on("/", HTTP_GET, onIndexRequest);
-  server.on("/servo", HTTP_GET, onIndexRequest);
-  server.on("/jogDial.min.js", HTTP_GET, onJSRequest);
-  server.on("/base_one_knob.png", HTTP_GET, onImgKnobRequest);
-  server.on("/base_one_bg.png", HTTP_GET, onImgBgRequest);
-  server.onNotFound(onPageNotFound);
+  // sServer.reset(); // begin();
+  sServer.serveStatic("/", SPIFFS, "/").setDefaultFile("servo.html");  
+  // sServer.on("/", HTTP_GET, onIndexRequest);
+  sServer.on("/servo", HTTP_GET, onIndexRequest);
+  sServer.on("/jogDial.min.js", HTTP_GET, onJSRequest);
+  sServer.on("/base_one_knob.png", HTTP_GET, onImgKnobRequest);
+  sServer.on("/base_one_bg.png", HTTP_GET, onImgBgRequest);
+  sServer.onNotFound(onPageNotFound);
+  sServer.begin();
 
   // Start WebSocket server and assign callback
   webSocket.begin();
   webSocket.onEvent(onWebSocketEvent);
+  Serial.println("initializeUI() Exited!");
+}
+
+void setup() {
+  Serial.begin(115200); 
+  Serial.println("Skoona.net Multple Servos with Feedback.");
+
+  /* Handle WiFi/AP
+  */
+  InitializeWiFi();
+
+  /*
+   * Init Servo
+  */
+  initializeServoControls();  
+
+  /* Initilize UI
+  */
+  initializeUI();
   
   Serial.printf("Setup Complete !\n");
 }

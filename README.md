@@ -39,3 +39,6 @@ Library Storage: ./PlatformIO/Projects/WebServos/.pio/libdeps/lolin32
     Updating WebSockets                      @ 2.2.1          [Up-to-date]
     Updating wifi Tool                       @ b02f893        [Up-to-date]
 
+## License
+
+    Open source under the MIT License.
