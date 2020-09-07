@@ -7,8 +7,10 @@ Features:
 * Follow Dial position
 * Record Phyical movement of Servos @ 0.5ms interval
 * Replay last recorded sequence
-* Requires Internet Access for UI
-* Standalone AP Configuration `ESP32_WebServo` 
+* When no saved wiFi credentials presents 
+* * Standalone AP Configuration 
+* * APnm: `ESP32_<hex-chip-id>_ServoAP` 
+* * APpw: `ESP32_<hex-chip-id>`
 
 # User Interface
 ![ScreenShot](./UI.png)
@@ -18,27 +20,19 @@ LOLIN32 V1.0.0 WiFi + bluetooth Module ESP-32 4MB FLASH Development Board
 
 ## Key Libraries
 
-[ESP8266 & ESP32 wifi tool](https://github.com/oferzv/wifiTool)
-
-SPIFFS oriented AsyncWebServer based wifi configuration tool.  This library was created to allow you with one include to have:
-
-1. auto wifi connect, with up to 3 saved router/password with easy wifi configuration tool.
-2. AP access when no wifi is connected with captive - for easy access.
-3. SPIFFS management tool.
-4. OTA over http.
-
-[WebSocket Server and Client for Arduino](https://github.com/Links2004/arduinoWebSockets)
+[ESPAsync_WiFiManager](https://github.com/khoih-prog/ESPAsync_WiFiManager)
+[ESPAsyncWebServer](https://github.com/me-no-dev/ESPAsyncWebServer)
+[ServoESP32](https://github.com/RoboticsBrno/ServoESP32)
+[ESP32AnalogRead](https://github.com/madhephaestus/ESP32AnalogRead)
 
 Library Storage: ./PlatformIO/Projects/WebServos/.pio/libdeps/lolin32
 
-    Updating ArduinoJson                     @ 6.16.1         [Up-to-date]
-    Updating AsyncTCP                        @ 1.1.1          [Up-to-date]
-    Updating ESP Async WebServer             @ 1.2.3          [Up-to-date]
-    Updating ESP32AnalogRead                 @ 0.0.5          [Up-to-date]
-    Updating ESPAsyncTCP                     @ 1.2.2          [Up-to-date]
-    Updating ServoESP32                      @ 1.0.3          [Up-to-date]
-    Updating WebSockets                      @ 2.2.1          [Up-to-date]
-    Updating wifi Tool                       @ b02f893        [Up-to-date]
+    Updating bblanchon/ArduinoJson                6.16.1          [Up-to-date]
+    Updating roboticsbrno/ServoESP32              1.0.3           [Up-to-date]
+    Updating madhephaestus/ESP32AnalogRead        0.0.5           [Up-to-date]
+    Updating me-no-dev/AsyncTCP                   1.1.1           [Up-to-date]
+    Updating me-no-dev/ESP Async WebServer        1.2.3           [Up-to-date]
+    Updating khoih-prog/ESPAsync_WifiManager      1.1.1           [Up-to-date]
 
 ## License
 

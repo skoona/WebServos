@@ -15,10 +15,6 @@
 #include <ArduinoJson.h>          //https://github.com/bblanchon/ArduinoJson
 
 #define MAX_SERVOS        4                 // Number of Servos for this Project
-#define SERVO_PULSE_MIN 500                 // Min Servo Pulse Width
-#define SERVO_PULSE_MAX 2500                // Max Servo Pulse width
-#define MAX_REQUEST_QUEUE_SZ 8              // Number of Request that can be queued
-
 
 typedef struct _qitem {
   uint32_t servo;
@@ -33,18 +29,14 @@ typedef struct __attribute__((packed)) _servoCalibration {
   uint32_t  maxPosition;
 }  ServoCalibration, *PServoCalibration;
 
-extern ServoCalibration calibrate[MAX_SERVOS];
-
-extern volatile bool gbRecordMode,  // Recording
-                     gbWSOnline;
-extern int servoDegreeMax;     // Config Params
-extern int servoRecordMax;     // Config Params
+extern int giDegreeMax;   // Config Params
+extern int giMaxRecCnt;   // Config Params 
+extern int giMinPulseWidth;   // Config Params
+extern int giMaxPulseWidth;   // Config Params 
 
 extern AsyncWebSocket ws;
 
 void initializeServoControls(); 
-JsonObject readRecordedMovements(String jsonFilePathname);
-bool saveRecordedMovements(const uint8_t *payload, String jsonFilePathname);
 bool servoRecordInterval(bool startStopFlag);
 void onEvent( AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventType type, void * arg, uint8_t *data, size_t len);
 

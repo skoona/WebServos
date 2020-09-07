@@ -7,9 +7,14 @@
 #include <SPIFFS.h>
 #include <Servo.h>
 #include <ESP32AnalogRead.h>
-#include <Preferences.h>
 
 #include "servos.h"
+extern FS* filesystem;
+#define FileFS  SPIFFS
+#define RECORDING_FILE "/records.bin"
+#define CALIBRATION_FILE "/servos.bin"
+#define MAX_REQUEST_QUEUE_SZ 24        // Number of Request that can be queued
+#define LED_BUILTIN       22
 
 static const int       servosPins[MAX_SERVOS] = {21, 19, 23, 18};
 static const int   servosPosition[MAX_SERVOS] = {32, 33, 34, 35};
@@ -22,22 +27,23 @@ volatile unsigned long guiTimeBase   = 0,      // default time base, target 0.5 
                   gulRecordCounter   = 0;      // Number of recorded records
 volatile bool     gbRecordMode       = false,  // Recording
                   gvDuration         = false,  // 1/2 second marker
-                  gbWSOnline         = false,  // WebSocket Client Connected
-                  gbCalibrate        = true,   // Servo Calibration Required
-                  gbServoCalibrate   = true;   // isCalibration Required
-int servoDegreeMax = 270;
-int servoRecordMax = 240;
+                  gbWSOnline         = false;  // WebSocket Client Connected
 
 
 volatile SemaphoreHandle_t servoMutex;
 Servo servos[MAX_SERVOS];
 ESP32AnalogRead adc[MAX_SERVOS];
 QueueHandle_t qRequest[MAX_SERVOS];
-Preferences preferences;
+
 ServoCalibration calibrate[MAX_SERVOS];
 
+bool saveRecordedMovements(bool firstFlag, const uint8_t *payload);
+
 uint32_t readServoAnalog(int servo) {
-    return adc[servo].readMiliVolts();
+  // Serial.println("readServoAnalog() Enter");
+  uint32_t res = adc[servo].readMiliVolts();
+  // Serial.println("readServoAnalog() Exit");
+    return res;
 }
 /*
  * Record generator
@@ -45,7 +51,10 @@ uint32_t readServoAnalog(int servo) {
 void servoRecordRequest() {
     char recordBuffer[128];      // recording entries
     gulRecordCounter += 1;
-    if (gulRecordCounter > servoRecordMax) {
+
+    // Serial.println("servoRecordRequest() Enter");
+
+    if (gulRecordCounter > giMaxRecCnt) {
       gbRecordMode = false;
       gulRecordCounter = 0;
       Serial.printf("Recording: [%lu] Limit Reached, Recording Stopped!\n", guiTimeBase);
@@ -56,32 +65,38 @@ void servoRecordRequest() {
 
     for(int servo = 0; servo < MAX_SERVOS; ++servo) {
       calibrate[servo].current = readServoAnalog( servo);
-      calibrate[servo].degree = map( calibrate[servo].current, calibrate[servo].minPosition, calibrate[servo].maxPosition, 0, servoDegreeMax);
+      calibrate[servo].degree = map( calibrate[servo].current, calibrate[servo].minPosition, calibrate[servo].maxPosition, 0, giDegreeMax);
       if (calibrate[servo].current >= calibrate[servo].maxPosition) {
-        calibrate[servo].degree = servoDegreeMax;
+        calibrate[servo].degree = giDegreeMax;
       } if (calibrate[servo].current <= calibrate[servo].minPosition) {
         calibrate[servo].degree = 0;
       } else {
-        calibrate[servo].degree = calibrate[servo].degree % (servoDegreeMax + 1);
+        calibrate[servo].degree = calibrate[servo].degree % (giDegreeMax + 1);
       }
       snprintf(recordBuffer, sizeof(recordBuffer), "{\"action\":\"record\",\"servo\":%d,\"degree\":%u}", servo, calibrate[servo].degree );
       Serial.printf("Recording: [%lu] %s\n", guiTimeBase, recordBuffer);
       ws.printfAll("%s", recordBuffer);
     }
+    saveRecordedMovements(false, (const uint8_t *)&calibrate );
+
+  // Serial.println("servoRecordRequest() Exit");
 }
 
 bool servoRecordInterval(bool startStopFlag = false) {
   guiTimeBase = millis();
   gvDuration = ((guiTimeBase - gulLastTimeBase) >= gulRecordInterval);
-
+  // Serial.println("servoRecordInterval() Enter");
   if (gbWSOnline && gvDuration && gbRecordMode) {
+    digitalWrite(LED_BUILTIN, HIGH);
     servoRecordRequest();
+    digitalWrite(LED_BUILTIN, LOW);
   }
 
   if (gvDuration) { // Every half second poll 
     gulLastTimeBase = guiTimeBase;        
   }
 
+  // Serial.println("servoRecordInterval() Exit");
   return gvDuration;
 }
 
@@ -90,6 +105,7 @@ bool servoRecordInterval(bool startStopFlag = false) {
 */
 void servoActionRequest(int servo, int degrees) {    
     PQItem pqi = NULL;
+    // Serial.println("servoActionRequest() Enter");
 
     pqi = (PQItem) heap_caps_malloc(sizeof( QItem ), MALLOC_CAP_8BIT);  // heap_caps_free() or free() later
     if (pqi != NULL) {
@@ -99,6 +115,7 @@ void servoActionRequest(int servo, int degrees) {
     } else {
       Serial.printf("Servo %d Memory Allocation Failed! pqi=%p .....................\n", servo, pqi);
     }
+    // Serial.println("servoActionRequest() Exit");
 }
 
 /*
@@ -108,7 +125,7 @@ bool attachServos() {
   bool rc = true;
   gbRecordMode = false;
   for(int i = 0; i < MAX_SERVOS; ++i) {
-    if(!servos[i].attach(servosPins[i],servoMtrChannel[i], 0, servoDegreeMax, SERVO_PULSE_MIN, SERVO_PULSE_MAX )) {
+    if(!servos[i].attach(servosPins[i],servoMtrChannel[i], 0, giDegreeMax, giMinPulseWidth, giMaxPulseWidth )) {
       Serial.printf("Servo %d attach error! \n", i);
       rc = false;
     }
@@ -133,10 +150,11 @@ bool detachServos() {
 
 void calibrateServos(long degrees) {
     long servoDegrees = 0;
-    
+    // Serial.println("calibrateServos() Enter");
+
     for(int i = 0; i < MAX_SERVOS; ++i) {
-      servoDegrees = degrees % servoDegreeMax;
-      if (servoDegrees == 0 && degrees == servoDegreeMax ) { 
+      servoDegrees = degrees % giDegreeMax;
+      if (servoDegrees == 0 && degrees == giDegreeMax ) { 
         servoDegrees = degrees;
       }
       servos[i].write(servoDegrees);      
@@ -148,11 +166,13 @@ void calibrateServos(long degrees) {
       calibrate[i].current = readServoAnalog(i);
       calibrate[i].minPosition = min(calibrate[i].minPosition, calibrate[i].current);
       calibrate[i].maxPosition = max(calibrate[i].maxPosition, calibrate[i].current);
-      calibrate[i].degree = map( calibrate[i].current, calibrate[i].minPosition, calibrate[i].maxPosition, 0, servoDegreeMax);
+      calibrate[i].degree = map( calibrate[i].current, calibrate[i].minPosition, calibrate[i].maxPosition, 0, giDegreeMax);
       
       Serial.printf("Servo: %d,\t W-degrees: %ld,\t delayed-analog: %u,\t delayed-degrees: %u, min: %u, max: %u \n", 
                     i, servoDegrees, calibrate[i].current, calibrate[i].degree, calibrate[i].minPosition, calibrate[i].maxPosition);
    } 
+
+  //  Serial.println("calibrateServos() Exit");
 }
 
 void servoTask(void * pServo) {
@@ -166,12 +186,13 @@ void servoTask(void * pServo) {
 
   for(;;){ // infinite loop        
     if ( xQueueReceive(qRequest[servo], &pqi, portMAX_DELAY) == pdTRUE) {
+      // Serial.println("servoTask() Enter");
       if (NULL == pqi) {
         vTaskDelay(1000/portTICK_PERIOD_MS);
         continue;
       }
-      servoDegrees = pqi->degree % servoDegreeMax;
-      if (servoDegrees == 0 && pqi->degree == servoDegreeMax ) { 
+      servoDegrees = pqi->degree % giDegreeMax;
+      if (servoDegrees == 0 && pqi->degree == giDegreeMax ) { 
         servoDegrees = pqi->degree;
       } 
 
@@ -180,10 +201,10 @@ void servoTask(void * pServo) {
         xSemaphoreGive(servoMutex);
         
         vDelay = (int)(abs(servoDegrees - lastKnownDegrees)/60.0 * 100.0 + 50);
-        vTaskDelay(vDelay/portTICK_PERIOD_MS); // 100ms/60degrees or 450ms for servoDegreeMax degrees
+        vTaskDelay(vDelay/portTICK_PERIOD_MS); // 100ms/60degrees or 450ms for giDegreeMax degrees
 
         calibrate[servo].current = readServoAnalog(servo);
-        calibrate[servo].degree = map( calibrate[servo].current, calibrate[servo].minPosition, calibrate[servo].maxPosition, 0, servoDegreeMax);
+        calibrate[servo].degree = map( calibrate[servo].current, calibrate[servo].minPosition, calibrate[servo].maxPosition, 0, giDegreeMax);
         Serial.printf("Servo %d analog: %u, degree: %u, stackHighwater: %d, QueueDepth: %d\n", 
                        servo, calibrate[servo].current, calibrate[servo].degree, uxTaskGetStackHighWaterMark(NULL), uxQueueMessagesWaiting( qRequest[servo] ));
       } 
@@ -192,6 +213,7 @@ void servoTask(void * pServo) {
     } else {
       vTaskDelay(1000/portTICK_PERIOD_MS);
     }
+    // Serial.println("servoTask() Exit");
     pqi = NULL;
   }
   vTaskDelete( NULL );
@@ -215,107 +237,132 @@ void initializeServoTasks() {
         tskNO_AFFINITY     // Run on any available core
       );
   }
-  Serial.println("initializeServoTasks() Exited!");
+  // Serial.println("initializeServoTasks() Exited!");
 }
 
 void initializeServoControls() {
   size_t size = 0;
+  bool gbServoCalibrate = true;
 
   servoMutex = xSemaphoreCreateMutex();
 
-  gbCalibrate = preferences.begin("Calibration", false);
-  if ( gbCalibrate ) {
-    Serial.println("Servo Calibration Preferences Opened!");
-    size = preferences.getBytes("Servos", &calibrate, sizeof(calibrate));
-    if (size > 0 ) {
-      servoDegreeMax = preferences.getInt("DegreeMax", servoDegreeMax);
-      servoRecordMax = preferences.getInt("RecordMax", servoRecordMax);
+  File calibrateFile = FileFS.open(CALIBRATION_FILE, FILE_READ);  // FILE_APPEND
+  if (calibrateFile) {
+    size = calibrateFile.size();
+    if (size > 0) {
+      size = calibrateFile.readBytes((char *)&calibrate, sizeof(calibrate));
       gbServoCalibrate = false;   // exists  
-      Serial.printf("Servos Preferences Read %d bytes.\n", size);
-    } else {
-      gbServoCalibrate = true;   // not saved, redo
-      Serial.println("Servo Preferences Not Found");
+    }
+    calibrateFile.close();
+
+    Serial.printf("Servos Saved Calibration Read %d bytes.\n", size);
+  } else {
+    Serial.println("Failed to open calibrarion file for reading");
+    gbServoCalibrate = true;   // not saved, redo
+  }
+
+  for(int i = 0; i < MAX_SERVOS; ++i) {
+    qRequest[i] = xQueueCreate( MAX_REQUEST_QUEUE_SZ, sizeof( PQItem ) );
+    if(qRequest[i] == NULL) {
+      Serial.printf("Error creating the request queue %d \n", i);
+    }
+      
+    pinMode(servosPosition[i], INPUT);
+    pinMode(servosPins[i], OUTPUT);
+
+    adc[i].attach(servosPosition[i]);
+
+    if (!gbServoCalibrate) {      
+      calibrate[i].minPosition = 155;
+      calibrate[i].maxPosition = 3105;
+    }
+  
+    if(!servos[i].attach(servosPins[i],servoMtrChannel[i], 0, giDegreeMax, giMinPulseWidth, giMaxPulseWidth )) {
+      Serial.printf("Servo %d attach error! \n", i);
     }
   }
 
-  if (gbServoCalibrate) {
-    for(int i = 0; i < MAX_SERVOS; ++i) {
-      qRequest[i] = xQueueCreate( MAX_REQUEST_QUEUE_SZ, sizeof( PQItem ) );
-      if(qRequest[i] == NULL) {
-        Serial.printf("Error creating the request queue %d \n", i);
-      }
-        
-      pinMode(servosPosition[i], INPUT);
-      pinMode(servosPins[i], OUTPUT);
-
-      adc[i].attach(servosPosition[i]);
-      calibrate[i].minPosition = 155;
-      calibrate[i].maxPosition = 3105;
-    
-      if(!servos[i].attach(servosPins[i],servoMtrChannel[i], 0, servoDegreeMax, SERVO_PULSE_MIN, SERVO_PULSE_MAX )) {
-        Serial.printf("Servo %d attach error! \n", i);
-      }
-    }
+  if (gbServoCalibrate) {    
     /*
       * Calibrate Servos
     */
-    calibrateServos(servoDegreeMax/2);
+    calibrateServos(giDegreeMax/2);
     calibrateServos(0);    
-    calibrateServos(servoDegreeMax/2);
-    calibrateServos(servoDegreeMax);
-    calibrateServos(servoDegreeMax/2);
+    calibrateServos(giDegreeMax/2);
+    calibrateServos(giDegreeMax);
+    calibrateServos(giDegreeMax/2);
 
-    if (gbCalibrate) {
-      Serial.println("Saving Servo Calibration!");
-      size = preferences.putBytes("Servos", &calibrate, sizeof(calibrate));
-        preferences.putInt("DegreeMax", servoDegreeMax);
-        preferences.putInt("RecordMax", servoRecordMax);
-      Serial.printf("Saved %d bytes! \n", size);  
+    Serial.println("Saving Servo Calibration!");
+    calibrateFile = FileFS.open(CALIBRATION_FILE, FILE_WRITE);  // FILE_APPEND
+    if (calibrateFile) {
+      size = calibrateFile.write((const uint8_t*)&calibrate, sizeof(calibrate));
+      calibrateFile.close();
+      Serial.printf("Servos Saved Calibration wrote %d bytes.\n", size);
+    } else {
+      Serial.printf("Failed to open calibrarion file for writing\n");
     }
     Serial.println("Servo Calibration Completed!");
   }
 
-  if (gbCalibrate) {
-    preferences.end();
-    Serial.println("Servo Calibration Preferences Closed!");
-  }
   gbRecordMode = false;
 
   initializeServoTasks();
 
-  Serial.println("initializeServoControls() Exited!");
+  // Serial.println("initializeServoControls() Exited!");
 }
 
-JsonObject readRecordedMovements(String jsonFilePathname) {
-  DynamicJsonDocument doc(4096);
-  if ( SPIFFS.exists(jsonFilePathname) ) {
+bool replayRecordedMovements() {
+  size_t size = 0, read = 0;
+  int recordsToRead = 0;
+  ServoCalibration recordings[MAX_SERVOS];
+
+  if ( SPIFFS.exists(RECORDING_FILE) ) {
     //file exists, reading and loading
-    Serial.printf("Reading file: %s\n", jsonFilePathname.c_str());
+    Serial.printf("Reading file: %s\n", RECORDING_FILE);
 
-    File jsonFile = SPIFFS.open(jsonFilePathname, "r");
-    if (jsonFile) {
-      DeserializationError err = deserializeJson(doc, jsonFile);
-      if (err) {
-        Serial.printf("failed to load File; cause %s\n", err.c_str());
-        jsonFile.close();
-        return doc.to<JsonObject>();
+    File file = SPIFFS.open(RECORDING_FILE, FILE_READ);
+    if (file) {
+      size = file.size();
+      if (size < 1) {
+        Serial.println("Recording File is EMPTY!");
+        file.close();
+        return false;
       } 
-      jsonFile.close();      
+
+      recordsToRead = size / sizeof(recordings);
+      Serial.printf("Recording File: size=%d, recordsToRead=%d\n", size, recordsToRead);
+      while(recordsToRead != 0) {
+        read = file.readBytes((char *)&recordings, sizeof(recordings));
+        recordsToRead -= 1;
+        Serial.printf("Recording File: readBytes=%d\n", read);
+        for(int i =0; i < MAX_SERVOS; i++) {
+          servoActionRequest(i, recordings[i].degree);
+        }
+      }
+
+      file.close();      
     }
+  } else {
+    return false;
   }
-  return doc.as<JsonObject>();
+  return true;
 }
 
-bool saveRecordedMovements(const uint8_t *payload, String jsonFilePathname) {
-  File jsonFile = SPIFFS.open(jsonFilePathname, "w");
-  if (!jsonFile) {
-    Serial.printf("Failed to open file: %s, for writing. \n", jsonFilePathname.c_str());
+bool saveRecordedMovements(bool firstFlag, const uint8_t *payload) {
+  File file;
+  if (firstFlag) {
+    file = SPIFFS.open(RECORDING_FILE, FILE_WRITE);
+  } else {
+    file = SPIFFS.open(RECORDING_FILE, FILE_APPEND);
+  }
+  if (!file) {
+    Serial.printf("Failed to open file: %s, for writing. \n", RECORDING_FILE);
     return false;
   }
 
-  jsonFile.write(payload, strlen((const char *)payload));
-  jsonFile.close();
-
+  file.write(payload, sizeof(calibrate));
+  file.flush();
+  file.close();
   return true;
 }
 
@@ -405,12 +452,15 @@ void onEvent( AsyncWebSocket * server,
             }
             server->printfAll("{\"action\":\"play\"}");
             lastStateBuffer = "{\"action\":\"state\",\"button\":\"play\"}";
+            replayRecordedMovements();
+            server->printfAll("{\"action\":\"follow\"}");
 
           } else if ( strcmp(doc["action"], "startRecord") == 0 ) {
             Serial.printf("StartRecord Action \n");
             if (!gbRecordMode) {
               detachServos();
             }
+            saveRecordedMovements(true, (const uint8_t *)&calibrate );
             server->printfAll("{\"action\":\"startRecord\"}");
             lastStateBuffer = "{\"action\":\"state\",\"button\":\"startRecord\"}";
 
