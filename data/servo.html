@@ -126,7 +126,7 @@
 	</div>
 
 	<script language="javascript" type="text/javascript">
-		var url = "ws://"+ window.location.hostname +":1337/";
+		var url = "ws://"+ window.location.hostname + "/ws"; //":1337/";
 		var opts = { 
 				debug: false, 
 				knobSize:'70px',     // 30%
@@ -249,7 +249,11 @@
 		    // Update circle graphic with LED state
 		    switch(package.action) {
 				case "state": // '{"action":"state","servo":2,"degree":135}'
-					updateDialPosition(package);
+					if ("button" in package) {  // "{"action":"state","button":"follow"}";
+						$("#"+package.button).click();
+					} else {  // '{"action":"state","servo":2,"degree":135}'
+						updateDialPosition(package);
+					}
 					console.log("State=" + evt.data );
 					break;
 					

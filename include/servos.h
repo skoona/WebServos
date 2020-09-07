@@ -11,29 +11,14 @@
 #ifndef _SERVOS
 #define _SERVOS
 
-#include <Arduino.h>
-#include <FS.h>
-#include <SPIFFS.h>
-#include <Servo.h>
-#include <ESP32AnalogRead.h>
-#include <Preferences.h>
+#include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>          //https://github.com/bblanchon/ArduinoJson
 
 #define MAX_SERVOS        4                 // Number of Servos for this Project
 #define SERVO_PULSE_MIN 500                 // Min Servo Pulse Width
 #define SERVO_PULSE_MAX 2500                // Max Servo Pulse width
-#define MAX_REQUEST_QUEUE_SZ 32             // Number of Request that can be queued
+#define MAX_REQUEST_QUEUE_SZ 8              // Number of Request that can be queued
 
-static const int       servosPins[MAX_SERVOS] = {21, 19, 23, 18};
-static const int   servosPosition[MAX_SERVOS] = {32, 33, 34, 35};
-static const int  servoMtrChannel[MAX_SERVOS] = {0, 1, 2, 3};
-static const int servoFdBKChannel[MAX_SERVOS] = {4, 5, 6, 7};
-static int servoDegreeMax = 270;
-static int servoRecordMax = 240;
-#define SERVO_DEGREE_MAX servoDegreeMax
-#define MAX_RECORD_COUNT servoRecordMax         // sequence, servo, degree
-
-extern QueueHandle_t qRequest[MAX_SERVOS];
 
 typedef struct _qitem {
   uint32_t servo;
@@ -50,18 +35,17 @@ typedef struct __attribute__((packed)) _servoCalibration {
 
 extern ServoCalibration calibrate[MAX_SERVOS];
 
+extern volatile bool gbRecordMode,  // Recording
+                     gbWSOnline;
+extern int servoDegreeMax;     // Config Params
+extern int servoRecordMax;     // Config Params
 
-void calibrateServos(long degrees);
-uint32_t readServoAnalog(int servo);
-bool attachServos();
-bool detachServos();
-void servoRecordRequest();
+extern AsyncWebSocket ws;
+
 void initializeServoControls(); 
-void initializeServoTasks();
-void servoActionRequest(int servo, int degrees);
-void servoTask(void * pServo);
 JsonObject readRecordedMovements(String jsonFilePathname);
 bool saveRecordedMovements(const uint8_t *payload, String jsonFilePathname);
-
+bool servoRecordInterval(bool startStopFlag);
+void onEvent( AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventType type, void * arg, uint8_t *data, size_t len);
 
 #endif /* !_SERVOS */
