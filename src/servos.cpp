@@ -31,6 +31,9 @@ volatile bool     gbRecordMode       = false,  // Recording
 
 
 volatile SemaphoreHandle_t servoMutex;
+
+TaskHandle_t replayTaskHandle;
+
 Servo servos[MAX_SERVOS];
 ESP32AnalogRead adc[MAX_SERVOS];
 QueueHandle_t qRequest[MAX_SERVOS];
@@ -38,6 +41,8 @@ QueueHandle_t qRequest[MAX_SERVOS];
 ServoCalibration calibrate[MAX_SERVOS];
 
 bool saveRecordedMovements(bool firstFlag, const uint8_t *payload);
+bool replayRecordedMovements();
+
 
 uint32_t readServoAnalog(int servo) {
   // Serial.println("readServoAnalog() Enter");
@@ -175,6 +180,31 @@ void calibrateServos(long degrees) {
   //  Serial.println("calibrateServos() Exit");
 }
 
+void replayServoTask(void * _ptr) {
+
+  uint32_t ulNotificationValue = 0;
+  vTaskDelay(1000/portTICK_PERIOD_MS);
+
+  for(;;){ // infinite loop        
+
+    ulNotificationValue = ulTaskNotifyTake( pdTRUE, portMAX_DELAY);
+    if ( ulNotificationValue == 1 ) {
+      Serial.printf("servoReplayTask() Active: %u", ulNotificationValue);
+
+      vTaskDelay(1000/portTICK_PERIOD_MS);
+
+      replayRecordedMovements();
+    } else {
+      Serial.printf("servoReplayTask() Timeout: %u", ulNotificationValue);
+      vTaskDelay(1000/portTICK_PERIOD_MS);
+    }
+    
+    Serial.println("servoReplayTask() Exit");
+
+  }
+  vTaskDelete( NULL );
+}
+
 void servoTask(void * pServo) {
   PQItem pqi;
   int servo  = (int)(*(int *)pServo);
@@ -223,7 +253,7 @@ void servoTask(void * pServo) {
  * Create Servo Handler
 */
 void initializeServoTasks() {
-  static const char *pchTitle[4] = {"ServoTask-00", "ServoTask-01", "ServoTask-02", "ServoTask-03"};
+  static const char *pchTitle[5] = {"ServoTask-00", "ServoTask-01", "ServoTask-02", "ServoTask-03", "ReplayServoTask"};
   static int  servoIds[MAX_SERVOS] = {0,1,2,3};
 
   for(int servo = 0; servo < MAX_SERVOS; ++servo) {
@@ -237,6 +267,17 @@ void initializeServoTasks() {
         tskNO_AFFINITY     // Run on any available core
       );
   }
+
+  xTaskCreatePinnedToCore(
+      replayServoTask,   // Function that should be called
+      pchTitle[4],       // Name of the task (for debugging)
+      2048,              // Stack size (bytes)
+      NULL,              // Parameter to pass
+      2,                 // Task priority
+      &replayTaskHandle, // Task handle
+      tskNO_AFFINITY     // Run on any available core
+  );
+
   // Serial.println("initializeServoTasks() Exited!");
 }
 
@@ -245,7 +286,7 @@ void initializeServoControls() {
   bool gbServoCalibrate = true;
 
   servoMutex = xSemaphoreCreateMutex();
-
+  
   File calibrateFile = FileFS.open(CALIBRATION_FILE, FILE_READ);  // FILE_APPEND
   if (calibrateFile) {
     size = calibrateFile.size();
@@ -338,6 +379,7 @@ bool replayRecordedMovements() {
         for(int i =0; i < MAX_SERVOS; i++) {
           servoActionRequest(i, recordings[i].degree);
         }
+        vTaskDelay(500/portTICK_PERIOD_MS); // replay in same period as recorded
       }
 
       file.close();      
@@ -452,8 +494,8 @@ void onEvent( AsyncWebSocket * server,
             }
             server->printfAll("{\"action\":\"play\"}");
             lastStateBuffer = "{\"action\":\"state\",\"button\":\"play\"}";
-            replayRecordedMovements();
             server->printfAll("{\"action\":\"follow\"}");
+            xTaskNotifyGive(replayTaskHandle); // release the BG Task
 
           } else if ( strcmp(doc["action"], "startRecord") == 0 ) {
             Serial.printf("StartRecord Action \n");
