@@ -20,10 +20,10 @@ LOLIN32 V1.0.0 WiFi + bluetooth Module ESP-32 4MB FLASH Development Board
 
 ## Key Libraries
 
-[ESPAsync_WiFiManager](https://github.com/khoih-prog/ESPAsync_WiFiManager)
-[ESPAsyncWebServer](https://github.com/me-no-dev/ESPAsyncWebServer)
-[ServoESP32](https://github.com/RoboticsBrno/ServoESP32)
-[ESP32AnalogRead](https://github.com/madhephaestus/ESP32AnalogRead)
+* [ESPAsync_WiFiManager](https://github.com/khoih-prog/ESPAsync_WiFiManager)
+* [ESPAsyncWebServer](https://github.com/me-no-dev/ESPAsyncWebServer)
+* [ServoESP32](https://github.com/RoboticsBrno/ServoESP32)
+* [ESP32AnalogRead](https://github.com/madhephaestus/ESP32AnalogRead)
 
 Library Storage: ./PlatformIO/Projects/WebServos/.pio/libdeps/lolin32
 
