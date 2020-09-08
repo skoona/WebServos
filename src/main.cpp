@@ -387,8 +387,8 @@ void InitializeWiFi() {
   // id/name placeholder/prompt default length
   ESPAsync_WMParameter cfgServoDegreeMaxParam("cfgDegreeMax", "Max Servo Degree", cfgDegreeMax, CFG_PARAM_LEN + 1);
   ESPAsync_WMParameter cfgServoMaxRecordCountParam  ("cfgMaxRecCnt",   "Max Servo Recordings",   cfgMaxRecCnt,   CFG_PARAM_LEN + 1);
-  ESPAsync_WMParameter cfgServoMinPulseWidthParam  ("cfgMinPulse",   "Min Servo Pulse(µs)",   cfgMinPulse,   CFG_PARAM_LEN + 1);
-  ESPAsync_WMParameter cfgServoMaxPulseWidthParam  ("cfgMaxPulse",   "Max Servo Pulse(µs)",   cfgMaxPulse,   CFG_PARAM_LEN + 1);
+  ESPAsync_WMParameter cfgServoMinPulseWidthParam  ("cfgMinPulse",   "Min Servo Pulse(μA)",   cfgMinPulse,   CFG_PARAM_LEN + 1);
+  ESPAsync_WMParameter cfgServoMaxPulseWidthParam  ("cfgMaxPulse",   "Max Servo Pulse(μA)",   cfgMaxPulse,   CFG_PARAM_LEN + 1);
 
   unsigned long startedAt = millis();
 
