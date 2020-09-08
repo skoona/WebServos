@@ -16,8 +16,8 @@ extern FS* filesystem;
 #define MAX_REQUEST_QUEUE_SZ 24        // Number of Request that can be queued
 #define LED_BUILTIN       22
 
-static const int       servosPins[MAX_SERVOS] = {21, 19, 23, 18};
-static const int   servosPosition[MAX_SERVOS] = {32, 33, 34, 35};
+static const int    servosPwmPins[MAX_SERVOS] = {21, 19, 23, 18};
+static const int    servosAdcPins[MAX_SERVOS] = {32, 33, 34, 35};
 static const int  servoMtrChannel[MAX_SERVOS] = {0, 1, 2, 3};
 static const int servoFdBKChannel[MAX_SERVOS] = {4, 5, 6, 7};
 
@@ -125,7 +125,7 @@ bool attachServos() {
   bool rc = true;
   gbRecordMode = false;
   for(int i = 0; i < MAX_SERVOS; ++i) {
-    if(!servos[i].attach(servosPins[i],servoMtrChannel[i], 0, giDegreeMax, giMinPulseWidth, giMaxPulseWidth )) {
+    if(!servos[i].attach(servosPwmPins[i],servoMtrChannel[i], 0, giDegreeMax, giMinPulseWidth, giMaxPulseWidth )) {
       Serial.printf("Servo %d attach error! \n", i);
       rc = false;
     }
@@ -267,17 +267,17 @@ void initializeServoControls() {
       Serial.printf("Error creating the request queue %d \n", i);
     }
       
-    pinMode(servosPosition[i], INPUT);
-    pinMode(servosPins[i], OUTPUT);
+    pinMode(servosAdcPins[i], INPUT);
+    pinMode(servosPwmPins[i], OUTPUT);
 
-    adc[i].attach(servosPosition[i]);
+    adc[i].attach(servosAdcPins[i]);
 
     if (!gbServoCalibrate) {      
       calibrate[i].minPosition = 155;
       calibrate[i].maxPosition = 3105;
     }
   
-    if(!servos[i].attach(servosPins[i],servoMtrChannel[i], 0, giDegreeMax, giMinPulseWidth, giMaxPulseWidth )) {
+    if(!servos[i].attach(servosPwmPins[i],servoMtrChannel[i], 0, giDegreeMax, giMinPulseWidth, giMaxPulseWidth )) {
       Serial.printf("Servo %d attach error! \n", i);
     }
   }
