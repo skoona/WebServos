@@ -13,8 +13,8 @@ extern FS* filesystem;
 #define FileFS  SPIFFS
 #define RECORDING_FILE "/records.bin"
 #define CALIBRATION_FILE "/servos.bin"
-#define MAX_REQUEST_QUEUE_SZ 24        // Number of Request that can be queued
-#define LED_BUILTIN       22
+#define MAX_REQUEST_QUEUE_SZ 16        // Number of Request that can be queued
+// #define LED_BUILTIN       22
 
 static const int    servosPwmPins[MAX_SERVOS] = {21, 19, 23, 18};
 static const int    servosAdcPins[MAX_SERVOS] = {32, 33, 34, 35};
@@ -41,7 +41,6 @@ QueueHandle_t qRequest[MAX_SERVOS];
 ServoCalibration calibrate[MAX_SERVOS];
 
 bool saveRecordedMovements(bool firstFlag, const uint8_t *payload);
-bool replayRecordedMovements();
 
 
 uint32_t readServoAnalog(int servo) {
@@ -56,6 +55,7 @@ uint32_t readServoAnalog(int servo) {
 void servoRecordRequest() {
     char recordBuffer[128];      // recording entries
     gulRecordCounter += 1;
+    ServoCalibration recordings[MAX_SERVOS];
 
     // Serial.println("servoRecordRequest() Enter");
 
@@ -69,20 +69,20 @@ void servoRecordRequest() {
     }
 
     for(int servo = 0; servo < MAX_SERVOS; ++servo) {
-      calibrate[servo].current = readServoAnalog( servo);
-      calibrate[servo].degree = map( calibrate[servo].current, calibrate[servo].minPosition, calibrate[servo].maxPosition, 0, giDegreeMax);
-      if (calibrate[servo].current >= calibrate[servo].maxPosition) {
-        calibrate[servo].degree = giDegreeMax;
-      } if (calibrate[servo].current <= calibrate[servo].minPosition) {
-        calibrate[servo].degree = 0;
+      recordings[servo].current = readServoAnalog( servo);
+      recordings[servo].degree = map( recordings[servo].current, recordings[servo].minPosition, recordings[servo].maxPosition, 0, giDegreeMax);
+      if (recordings[servo].current >= recordings[servo].maxPosition) {
+        recordings[servo].degree = giDegreeMax;
+      } if (recordings[servo].current <= recordings[servo].minPosition) {
+        recordings[servo].degree = 0;
       } else {
-        calibrate[servo].degree = calibrate[servo].degree % (giDegreeMax + 1);
+        recordings[servo].degree = recordings[servo].degree % (giDegreeMax + 1);
       }
-      snprintf(recordBuffer, sizeof(recordBuffer), "{\"action\":\"record\",\"servo\":%d,\"degree\":%u}", servo, calibrate[servo].degree );
+      snprintf(recordBuffer, sizeof(recordBuffer), "{\"action\":\"record\",\"servo\":%d,\"degree\":%u}", servo, recordings[servo].degree );
       Serial.printf("Recording: [%lu] %s\n", guiTimeBase, recordBuffer);
       ws.printfAll("%s", recordBuffer);
     }
-    saveRecordedMovements(false, (const uint8_t *)&calibrate );
+    saveRecordedMovements(false, (const uint8_t *)&recordings );
 
   // Serial.println("servoRecordRequest() Exit");
 }
@@ -165,7 +165,7 @@ void calibrateServos(long degrees) {
       servos[i].write(servoDegrees);      
     }
 
-    vTaskDelay(500/portTICK_PERIOD_MS);
+    vTaskDelay(pdMS_TO_TICKS(500));
 
     for(int i = 0; i < MAX_SERVOS; ++i) {
       calibrate[i].current = readServoAnalog(i);
@@ -181,9 +181,12 @@ void calibrateServos(long degrees) {
 }
 
 void replayServoTask(void * _ptr) {
-
   uint32_t ulNotificationValue = 0;
-  vTaskDelay(1000/portTICK_PERIOD_MS);
+  size_t size = 0, read = 0;
+  int recordsToRead = 0;
+  ServoCalibration recordings[MAX_SERVOS];
+
+  vTaskDelay(pdMS_TO_TICKS(1000));
 
   for(;;){ // infinite loop        
 
@@ -191,12 +194,39 @@ void replayServoTask(void * _ptr) {
     if ( ulNotificationValue == 1 ) {
       Serial.printf("servoReplayTask() Active: %u\n", ulNotificationValue);
 
-      vTaskDelay(1000/portTICK_PERIOD_MS);
+      vTaskDelay(pdMS_TO_TICKS(1000));
 
-      replayRecordedMovements();
+      if ( SPIFFS.exists(RECORDING_FILE) ) {
+        //file exists, reading and loading
+        Serial.printf("Reading file: %s\n", RECORDING_FILE);
+
+        File file = SPIFFS.open(RECORDING_FILE, FILE_READ);
+        if (file) {
+          size = file.size();
+          if (size < 1) {
+            Serial.println("Recording File is EMPTY!");
+            file.close();
+            continue;
+          } 
+
+          recordsToRead = size / sizeof(recordings);
+          Serial.printf("Recording File: size=%d, recordsToRead=%d\n", size, recordsToRead);
+          while(recordsToRead != 0) {
+            read = file.readBytes((char *)&recordings, sizeof(recordings));
+            recordsToRead -= 1;
+            Serial.printf("Recording File: readBytes=%d\n", read);
+            for(int i =0; i < MAX_SERVOS; i++) {
+              servoActionRequest(i, recordings[i].degree);
+            }
+            vTaskDelay(pdMS_TO_TICKS(500)); // replay in same period as recorded
+          }
+
+          file.close();      
+        }
+      }
     } else {
       Serial.printf("servoReplayTask() Timeout: %u\n", ulNotificationValue);
-      vTaskDelay(1000/portTICK_PERIOD_MS);
+      vTaskDelay(pdMS_TO_TICKS(1000));
     }
     
     Serial.println("servoReplayTask() Waiting!");
@@ -212,13 +242,13 @@ void servoTask(void * pServo) {
       vDelay = 0,
       lastKnownDegrees = 0;
 
-  vTaskDelay(1000/portTICK_PERIOD_MS);
+  vTaskDelay(pdMS_TO_TICKS(1000));
 
   for(;;){ // infinite loop        
     if ( xQueueReceive(qRequest[servo], &pqi, portMAX_DELAY) == pdTRUE) {
-      // Serial.println("servoTask() Enter");
+      Serial.printf("servoTask() Enter: cfgDegreeMax=%d\n", giDegreeMax);
       if (NULL == pqi) {
-        vTaskDelay(1000/portTICK_PERIOD_MS);
+        vTaskDelay(pdMS_TO_TICKS(1000));
         continue;
       }
       servoDegrees = pqi->degree % giDegreeMax;
@@ -231,7 +261,7 @@ void servoTask(void * pServo) {
         xSemaphoreGive(servoMutex);
         
         vDelay = (int)(abs(servoDegrees - lastKnownDegrees)/60.0 * 100.0 + 50);
-        vTaskDelay(vDelay/portTICK_PERIOD_MS); // 100ms/60degrees or 450ms for giDegreeMax degrees
+        vTaskDelay( pdMS_TO_TICKS(vDelay) ); // 100ms/60degrees or 450ms for giDegreeMax degrees
 
         calibrate[servo].current = readServoAnalog(servo);
         calibrate[servo].degree = map( calibrate[servo].current, calibrate[servo].minPosition, calibrate[servo].maxPosition, 0, giDegreeMax);
@@ -241,7 +271,7 @@ void servoTask(void * pServo) {
       lastKnownDegrees = servoDegrees;
       heap_caps_free(pqi); // free allocation
     } else {
-      vTaskDelay(1000/portTICK_PERIOD_MS);
+      vTaskDelay(pdMS_TO_TICKS(1000));
     }
     // Serial.println("servoTask() Exit");
     pqi = NULL;
@@ -271,7 +301,7 @@ void initializeServoTasks() {
   xTaskCreatePinnedToCore(
       replayServoTask,   // Function that should be called
       pchTitle[4],       // Name of the task (for debugging)
-      2048,              // Stack size (bytes)
+      3072,              // Stack size (bytes)
       NULL,              // Parameter to pass
       2,                 // Task priority
       &replayTaskHandle, // Task handle
@@ -350,44 +380,6 @@ void initializeServoControls() {
   initializeServoTasks();
 
   // Serial.println("initializeServoControls() Exited!");
-}
-
-bool replayRecordedMovements() {
-  size_t size = 0, read = 0;
-  int recordsToRead = 0;
-  ServoCalibration recordings[MAX_SERVOS];
-
-  if ( SPIFFS.exists(RECORDING_FILE) ) {
-    //file exists, reading and loading
-    Serial.printf("Reading file: %s\n", RECORDING_FILE);
-
-    File file = SPIFFS.open(RECORDING_FILE, FILE_READ);
-    if (file) {
-      size = file.size();
-      if (size < 1) {
-        Serial.println("Recording File is EMPTY!");
-        file.close();
-        return false;
-      } 
-
-      recordsToRead = size / sizeof(recordings);
-      Serial.printf("Recording File: size=%d, recordsToRead=%d\n", size, recordsToRead);
-      while(recordsToRead != 0) {
-        read = file.readBytes((char *)&recordings, sizeof(recordings));
-        recordsToRead -= 1;
-        Serial.printf("Recording File: readBytes=%d\n", read);
-        for(int i =0; i < MAX_SERVOS; i++) {
-          servoActionRequest(i, recordings[i].degree);
-        }
-        vTaskDelay(500/portTICK_PERIOD_MS); // replay in same period as recorded
-      }
-
-      file.close();      
-    }
-  } else {
-    return false;
-  }
-  return true;
 }
 
 bool saveRecordedMovements(bool firstFlag, const uint8_t *payload) {
