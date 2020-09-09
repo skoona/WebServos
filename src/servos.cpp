@@ -189,17 +189,17 @@ void replayServoTask(void * _ptr) {
 
     ulNotificationValue = ulTaskNotifyTake( pdTRUE, portMAX_DELAY);
     if ( ulNotificationValue == 1 ) {
-      Serial.printf("servoReplayTask() Active: %u", ulNotificationValue);
+      Serial.printf("servoReplayTask() Active: %u\n", ulNotificationValue);
 
       vTaskDelay(1000/portTICK_PERIOD_MS);
 
       replayRecordedMovements();
     } else {
-      Serial.printf("servoReplayTask() Timeout: %u", ulNotificationValue);
+      Serial.printf("servoReplayTask() Timeout: %u\n", ulNotificationValue);
       vTaskDelay(1000/portTICK_PERIOD_MS);
     }
     
-    Serial.println("servoReplayTask() Exit");
+    Serial.println("servoReplayTask() Waiting!");
 
   }
   vTaskDelete( NULL );
