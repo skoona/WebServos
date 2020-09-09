@@ -49,8 +49,6 @@ FS* filesystem =      &SPIFFS;
 // Now support ArduinoJson 6.0.0+ ( tested with v6.14.1 )
 #include <ArduinoJson.h>          //https://github.com/bblanchon/ArduinoJson
 
-char configFileName[] = "/config.json";
-
 // SSID and PW for your Router
 String Router_SSID;
 String Router_Pass;
@@ -61,6 +59,7 @@ String Router_Pass;
 #define PASS_MAX_LEN            64
 #define NUM_WIFI_CREDENTIALS     2
 #define CONFIG_FILENAME          F("/wifi_cred.dat")
+#define PARAMS_CONFIG_FILENAME   F("/params.json")
 
 typedef struct
 {
@@ -114,7 +113,7 @@ DNSServer dnsServer;
 #include "servos.h"
 
 
-//define your default values here, if there are different values in configFileName (config.json), they are overwritten.
+//define your default values here, if there are different values in PARAMS_CONFIG_FILENAME (config.json), they are overwritten.
 #define CFG_PARAM_LEN                16
 char cfgDegreeMax[CFG_PARAM_LEN] = "270";
 char cfgMaxRecCnt[CFG_PARAM_LEN] = "240";
@@ -144,11 +143,11 @@ bool loadFileFSConfigFile(void) {
   {
     Serial.println("Mounted file system");
 
-    if (FileFS.exists(configFileName))
+    if (FileFS.exists(PARAMS_CONFIG_FILENAME))
     {
       //file exists, reading and loading
       Serial.println("Reading config file");
-      File configFile = FileFS.open(configFileName, "r");
+      File configFile = FileFS.open(PARAMS_CONFIG_FILENAME, FILE_READ);
 
       if (configFile)
       {
@@ -168,6 +167,7 @@ bool loadFileFSConfigFile(void) {
         if ( deserializeError )
         {
           Serial.println("failed");
+          configFile.close();
           return false;
         }
         else
@@ -215,13 +215,17 @@ bool saveFileFSConfigFile(void)
 
   DynamicJsonDocument json(128);
 
+  itoa( giDegreeMax, cfgDegreeMax, 10);
+  itoa( giMaxRecCnt, cfgMaxRecCnt, 10);
+  itoa( giMinPulseWidth, cfgMinPulse, 10);
+  itoa( giMaxPulseWidth, cfgMaxPulse, 10);
 
-  json["cfgDegreeMax"] = String( giDegreeMax ).c_str();
-  json["cfgMaxRecCnt"] = String( giMaxRecCnt ).c_str();
-  json["cfgMinPulse"] = String( giMinPulseWidth ).c_str();
-  json["cfgMaxPulse"] = String( giMaxPulseWidth ).c_str();
+  json["cfgDegreeMax"] = cfgDegreeMax;
+  json["cfgMaxRecCnt"] = cfgMaxRecCnt;
+  json["cfgMinPulse"] = cfgMinPulse;
+  json["cfgMaxPulse"] = cfgMaxPulse;
 
-  File configFile = FileFS.open(configFileName, FILE_WRITE);  // FILE_APPEND
+  File configFile = FileFS.open(PARAMS_CONFIG_FILENAME, FILE_WRITE);  // FILE_APPEND
 
   if (!configFile)
   {
@@ -387,8 +391,8 @@ void InitializeWiFi() {
   // id/name placeholder/prompt default length
   ESPAsync_WMParameter cfgServoDegreeMaxParam("cfgDegreeMax", "Max Servo Degree", cfgDegreeMax, CFG_PARAM_LEN + 1);
   ESPAsync_WMParameter cfgServoMaxRecordCountParam  ("cfgMaxRecCnt",   "Max Servo Recordings",   cfgMaxRecCnt,   CFG_PARAM_LEN + 1);
-  ESPAsync_WMParameter cfgServoMinPulseWidthParam  ("cfgMinPulse",   "Min Servo Pulse(μA)",   cfgMinPulse,   CFG_PARAM_LEN + 1);
-  ESPAsync_WMParameter cfgServoMaxPulseWidthParam  ("cfgMaxPulse",   "Max Servo Pulse(μA)",   cfgMaxPulse,   CFG_PARAM_LEN + 1);
+  ESPAsync_WMParameter cfgServoMinPulseWidthParam  ("cfgMinPulse",   "Min Servo Pulse(&#181;A)",   cfgMinPulse,   CFG_PARAM_LEN + 1);
+  ESPAsync_WMParameter cfgServoMaxPulseWidthParam  ("cfgMaxPulse",   "Max Servo Pulse(&#181;A)",   cfgMaxPulse,   CFG_PARAM_LEN + 1);
 
   unsigned long startedAt = millis();
 
@@ -536,6 +540,10 @@ void InitializeWiFi() {
   strncpy(cfgMaxRecCnt,   cfgServoMaxRecordCountParam.getValue(),   sizeof(cfgMaxRecCnt));
   strncpy(cfgMinPulse, cfgServoMinPulseWidthParam.getValue(), sizeof(cfgMinPulse));
   strncpy(cfgMaxPulse,   cfgServoMaxPulseWidthParam.getValue(),   sizeof(cfgMaxPulse));
+  giDegreeMax = atoi(cfgDegreeMax);          
+  giMaxRecCnt = atoi(cfgMaxRecCnt);
+  giMinPulseWidth = atoi(cfgMinPulse);
+  giMaxPulseWidth = atoi(cfgMaxPulse);
 
   //save the custom parameters to FS
   if (shouldSaveConfig)
