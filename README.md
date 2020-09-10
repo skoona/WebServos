@@ -32,7 +32,7 @@ Library Storage: ./PlatformIO/Projects/WebServos/.pio/libdeps/lolin32
     Updating madhephaestus/ESP32AnalogRead        0.0.5           [Up-to-date]
     Updating me-no-dev/AsyncTCP                   1.1.1           [Up-to-date]
     Updating me-no-dev/ESP Async WebServer        1.2.3           [Up-to-date]
-    Updating khoih-prog/ESPAsync_WifiManager      1.1.1           [Up-to-date]
+    Updating git+https://github.com/oferzv/wifiTool.git#master    [Up-to-date]
 
 ## License
 

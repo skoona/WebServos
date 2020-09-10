@@ -1,0 +1,139 @@
+<!-- wifi_manager.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<meta charset="utf-8" />
+	<title>ESP32 Management Portal</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<link rel="stylesheet" type="text/css" href="mini-default.css" media="screen"/>
+	<script async src="jquery.min.js" type="text/javascript"></script>
+
+<script>
+function getWifiScanJson() {
+  var xhttp = new XMLHttpRequest();
+  xhttp.onreadystatechange = function() {
+    if (this.readyState == 4 && this.status == 200) {
+	  var obj =  JSON.parse(this.responseText);
+	  if (obj.scan_result.length) {
+		var htmlSrc = '<ul>';
+		for (var i=0; i< obj.scan_result.length; i++) {
+			htmlSrc += '<li><strong>' + obj.scan_result[i].SSID + '</strong> ' + obj.scan_result[i].RSSI + '%</li>'; 
+		}
+		htmlSrc += '</ul>';
+		document.getElementById("wifilist").innerHTML = htmlSrc;
+	  }
+	  console.log(obj);
+    }
+  };
+  xhttp.open("GET", "wifiScan.json", true);
+  xhttp.send();
+ }
+
+
+function getSecretJson() {
+  var xhttp = new XMLHttpRequest();
+  xhttp.onreadystatechange = function() {
+    if (this.readyState == 4 && this.status == 200) {
+      //document.getElementById("LEDState").innerHTML =
+	  var obj =  JSON.parse(this.responseText);
+	  for (var i=1; i <4; i++) {
+		document.getElementById("ssid" + i).value = obj['ssid'+i];
+		document.getElementById("pass" + i).value = obj['pass'+i];
+	  }
+	  console.log(obj);
+    }
+  };
+  xhttp.open("GET", "secrets.json", true);
+  xhttp.send();
+ }
+
+ 
+ function showPassword(id) {
+  var x = document.getElementById(id);
+  if (x.type === "password") {
+    x.type = "text";
+  } else {
+    x.type = "password";
+  }
+}
+</script> 
+
+<style>
+<!--tbd-->
+</style>
+ 
+</head>
+
+
+<body>
+		<header class="sticky">
+		<img src="logo.svg" alt="" width="24">
+    <a href="#" class="button"><strong>WebServos</strong></a>
+    <button class="active" onclick= "window.location.href = '/wifi_manager.html'"> Wifi Admin</button>
+    <button onclick="window.location.href = '/wifi_upload.html'"> OTA Admin</button>
+    <button onclick="window.location.href = '/wifi_spiffs_admin.html'"> SPIFFS Admin</button>
+    <button class="secondary" onclick="restartRequest()">Restart</button>
+  </header>
+
+	<div class="container">
+		<div class="row">
+			<div class="col-md-8 col-md-offset-2">
+				<h1>Management Portal</h1>
+
+				<form action="/saveSecret/" method="POST" >
+					<fieldset>
+						<legend>WiFi Admin</legend>
+						<div class="row">
+							<div class="col-md-4">
+								<div class="input-group vertical">
+									<label for="ssid1">ssid1:</label>
+									<input type="text" id="ssid1" name="ssid1" maxlength="32" size="16">
+									<label for="pass1">password1:</label>
+									<input type="password" id="pass1" name="pass1"  maxlength="64" size="16">
+									<!-- An element to toggle between password visibility -->
+									<label for="cb1">
+										<input id="cb1" type="checkbox" onclick="showPassword('pass1')">Show Password
+									</label>
+								</div>
+							</div>
+							<div class="col-md-4">
+								<div class="input-group vertical">
+									<label for="ssid2">ssid2:</label>
+									<input type="text" id="ssid2" name="ssid2" maxlength="32" size="16">
+									<label for="pass2">password2:</label>
+									<input type="password" id="pass2" name="pass2" maxlength="64" size="16">
+									<!-- An element to toggle between password visibility -->
+									<label for="cb2">
+										<input id="cb2" type="checkbox" onclick="showPassword('pass2')">Show Password
+									</label>
+								</div>
+							</div>
+							<div class="col-md-4">
+								<div class="input-group vertical">
+									<label for="ssid3">ssid3:</label>
+									<input type="text" id="ssid3" name="ssid3" maxlength="32" size="16">
+									<label for="pass3">password3:</label>
+									<input type="password" id="pass3" name="pass3"  maxlength="64" size="16">
+									<label for="cb3">
+										<input id="cb3" type="checkbox" onclick="showPassword('pass3')">Show Password
+									</label>
+								</div>
+							</div>
+						</div>
+						<!-- Clear form -->
+						<input class="button inverse" type="reset" value="Clear"/>
+						<input class="button large primary" type="submit" value="Save"/>
+					</fieldset>
+				</form>
+				<button class="button large tertiary" onClick="getWifiScanJson()">Wifi Scan</button>
+				<div id="wifilist"></div>
+			</div>
+		</div>
+	</div>
+
+<script>
+getSecretJson();
+</script>
+</body>
+</html>
