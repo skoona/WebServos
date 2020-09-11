@@ -13,17 +13,26 @@
 
 
 #include <wifiTool.h>
+#include <esp_wifi.h>
+ 
+#include <Wire.h>               // Only needed for Arduino 1.6.5 and earlier
+#include "SSD1306Wire.h"        // legacy: #include "SSD1306.h"
 
 #include <FS.h>
 
 #define CONFIG_FILENAME          F("/wifi_cred.dat")
 #define PARAMS_CONFIG_FILENAME   F("/params.json")
 #define PIN_LED LED_BUILTIN
+#define PIN_SDA           17  // blue
+#define PIN_SCL           16  // gray
 
 #include <SPIFFS.h>
 FS* filesystem =      &SPIFFS;
 #define FileFS        SPIFFS
 #define FS_Name       "SPIFFS"
+
+// String ssid = "ESP_" + String((uint32_t)ESP.getEfuseMac()) + "-WebServos";
+#define ESP_getChipId()   ((uint32_t)ESP.getEfuseMac())
 
 //define your default values here, if there are different values in PARAMS_CONFIG_FILENAME (config.json), they are overwritten.
 #define CFG_PARAM_LEN                16
@@ -41,6 +50,7 @@ int  giMaxPulseWidth = 2500;
 WifiTool wifiTool;
 AsyncWebServer webServer(80);
 AsyncWebSocket ws("/ws");
+SSD1306Wire display(0x3c, PIN_SDA, PIN_SCL);  
 
 #include "servos.h"
 
@@ -48,6 +58,26 @@ void toggleLED()
 {
   //toggle state
   digitalWrite(PIN_LED, !digitalRead(PIN_LED));
+}
+
+void updateOLEDDisplay() {
+  display.clear();
+  display.display();
+  display.setFont(ArialMT_Plain_16);
+    display.drawString(0, 0, "IP: ");
+    display.drawString(display.getStringWidth("IP: "), 0, WiFi.localIP().toString().c_str());
+
+  // display.setFont(ArialMT_Plain_10);
+    display.drawString(0, 16, "DegreeMax");
+    display.drawString(display.getStringWidth("DegreeMax: "), 16, cfgDegreeMax);
+    display.drawString(0, 32, "MaxRecCnt" );
+    display.drawString(display.getStringWidth("MaxRecCnt: "), 32, cfgMaxRecCnt );
+    display.drawString(0, 48, "MinPulse" );
+    display.drawString(display.getStringWidth("DegreeMax: "), 48, cfgMinPulse );
+    display.drawString(0, 64, "MaxPulse" );
+    display.drawString(display.getStringWidth("DegreeMax: "), 64, cfgMaxPulse );
+
+  display.display();
 }
 
 bool loadFileFSConfigFile(void) {
@@ -100,12 +130,12 @@ bool loadFileFSConfigFile(void) {
           }
 
           if (json["cfgMinPulse"]) {
-            strncpy(cfgMaxRecCnt, json["cfgMinPulse"], sizeof(cfgMinPulse)); 
+            strncpy(cfgMinPulse, json["cfgMinPulse"], sizeof(cfgMinPulse)); 
             giMinPulseWidth = atoi(json["cfgMinPulse"]);
           }
 
           if (json["cfgMaxPulse"]) {
-            strncpy(cfgMaxRecCnt, json["cfgMaxPulse"], sizeof(cfgMaxPulse)); 
+            strncpy(cfgMaxPulse, json["cfgMaxPulse"], sizeof(cfgMaxPulse)); 
             giMaxPulseWidth = atoi(json["cfgMaxPulse"]);
           }
         }
@@ -129,6 +159,9 @@ bool saveFileFSConfigFile(void)
   Serial.println("Saving config");
 
   DynamicJsonDocument json(128);
+
+  // use this callback to update display
+  updateOLEDDisplay();
 
   itoa( giDegreeMax, cfgDegreeMax, 10);
   itoa( giMaxRecCnt, cfgMaxRecCnt, 10);
@@ -201,6 +234,18 @@ void setup() {
   Serial.begin(115200); 
   while (!Serial);
 
+  Wire.begin(PIN_SDA, PIN_SCL, 400000U);
+  display.init();
+
+  display.flipScreenVertically();
+  display.setFont(ArialMT_Plain_10);
+  display.setTextAlignment(TEXT_ALIGN_LEFT);
+  display.clear();
+
+  // write the buffer to the display
+  display.drawString(0, 0, "WebServos");
+  display.display();
+  
   Serial.print("\nStarting Async WebServos using " + String(FS_Name));
   Serial.println(" on " + String(ARDUINO_BOARD));
 
