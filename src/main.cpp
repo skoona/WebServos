@@ -21,7 +21,6 @@
 #include <FS.h>
 
 #define CONFIG_FILENAME          F("/wifi_cred.dat")
-#define PARAMS_CONFIG_FILENAME   F("/params.json")
 #define PIN_LED LED_BUILTIN
 #define PIN_SDA           17  // blue
 #define PIN_SCL           16  // gray
@@ -34,17 +33,8 @@ FS* filesystem =      &SPIFFS;
 // String ssid = "ESP_" + String((uint32_t)ESP.getEfuseMac()) + "-WebServos";
 #define ESP_getChipId()   ((uint32_t)ESP.getEfuseMac())
 
-//define your default values here, if there are different values in PARAMS_CONFIG_FILENAME (config.json), they are overwritten.
+//define your default values here, if there are different values in CALIBRATION_STANDARDS_FILE (config.json), they are overwritten.
 #define CFG_PARAM_LEN                16
-char cfgDegreeMax[CFG_PARAM_LEN] = "270";
-char cfgMaxRecCnt[CFG_PARAM_LEN] = "240";
-int  giDegreeMax = 270;
-int  giMaxRecCnt = 240;
-
-char cfgMinPulse[CFG_PARAM_LEN] = "500";
-char cfgMaxPulse[CFG_PARAM_LEN] = "2500";
-int  giMinPulseWidth = 500;
-int  giMaxPulseWidth = 2500;
 
 
 WifiTool wifiTool;
@@ -80,118 +70,6 @@ void updateOLEDDisplay() {
   display.display();
 }
 
-bool loadFileFSConfigFile(void) {
-  //read configuration from FS json
-  Serial.println("Mounting FS...");
-
-  if (FileFS.begin())
-  {
-    Serial.println("Mounted file system");
-
-    if (FileFS.exists(PARAMS_CONFIG_FILENAME))
-    {
-      //file exists, reading and loading
-      Serial.println("Reading config file");
-      File configFile = FileFS.open(PARAMS_CONFIG_FILENAME, FILE_READ);
-
-      if (configFile)
-      {
-        Serial.print("Opened config file, size = ");
-        size_t configFileSize = configFile.size();
-        Serial.println(configFileSize);
-
-        // Allocate a buffer to store contents of the file.
-        std::unique_ptr<char[]> buf(new char[configFileSize + 1]);
-
-        configFile.readBytes(buf.get(), configFileSize);
-
-        Serial.print("\nJSON parseObject() result : ");
-
-        DynamicJsonDocument json(1024);
-        auto deserializeError = deserializeJson(json, buf.get(), configFileSize);
-        if ( deserializeError )
-        {
-          Serial.println("failed");
-          configFile.close();
-          return false;
-        }
-        else
-        {
-          Serial.println("OK");
-
-          if (json["cfgDegreeMax"]) {
-            strncpy(cfgDegreeMax, json["cfgDegreeMax"], sizeof(cfgDegreeMax));
-            giDegreeMax = atoi(json["cfgDegreeMax"]);          
-          }
-         
-          if (json["cfgMaxRecCnt"]) {
-            strncpy(cfgMaxRecCnt, json["cfgMaxRecCnt"], sizeof(cfgMaxRecCnt)); 
-            giMaxRecCnt = atoi(json["cfgMaxRecCnt"]);
-          }
-
-          if (json["cfgMinPulse"]) {
-            strncpy(cfgMinPulse, json["cfgMinPulse"], sizeof(cfgMinPulse)); 
-            giMinPulseWidth = atoi(json["cfgMinPulse"]);
-          }
-
-          if (json["cfgMaxPulse"]) {
-            strncpy(cfgMaxPulse, json["cfgMaxPulse"], sizeof(cfgMaxPulse)); 
-            giMaxPulseWidth = atoi(json["cfgMaxPulse"]);
-          }
-        }
-
-        serializeJsonPretty(json, Serial);
-
-        configFile.close();
-      }
-    }
-  }
-  else
-  {
-    Serial.println("failed to mount FS");
-    return false;
-  }
-  return true;
-}
-
-bool saveFileFSConfigFile(void)
-{
-  Serial.println("Saving config");
-
-  DynamicJsonDocument json(128);
-
-  // use this callback to update display
-  updateOLEDDisplay();
-
-  itoa( giDegreeMax, cfgDegreeMax, 10);
-  itoa( giMaxRecCnt, cfgMaxRecCnt, 10);
-  itoa( giMinPulseWidth, cfgMinPulse, 10);
-  itoa( giMaxPulseWidth, cfgMaxPulse, 10);
-
-  json["cfgDegreeMax"] = cfgDegreeMax;
-  json["cfgMaxRecCnt"] = cfgMaxRecCnt;
-  json["cfgMinPulse"] = cfgMinPulse;
-  json["cfgMaxPulse"] = cfgMaxPulse;
-
-  File configFile = FileFS.open(PARAMS_CONFIG_FILENAME, FILE_WRITE);  // FILE_APPEND
-
-  if (!configFile)
-  {
-    Serial.println("Failed to open config file for writing");
-    return false;
-  }
-
-  //serializeJson(json, Serial);
-  serializeJsonPretty(json, Serial);
-  // Write data to file and close it
-  serializeJson(json, configFile);
-
-  configFile.close();
-  //end save
-  return true;
-}
-
-
 // Callback: send 404 if requested file does not exist
 void onPageNotFound(AsyncWebServerRequest *request) {
   IPAddress remote_ip = request->client()->remoteIP();
@@ -200,17 +78,13 @@ void onPageNotFound(AsyncWebServerRequest *request) {
   request->send(404, "text/plain", "Not found");
 }
 
-void initializeWiFi() {
-  loadFileFSConfigFile();
-  
+void initializeWiFi() { 
   wifiTool.begin(false);
   if (!wifiTool.wifiAutoConnect()) {
     Serial.println("fail to connect to wifi!!!!");
     wifiTool.runApPortal();
   }
-
-  saveFileFSConfigFile();
-  
+ 
   Serial.println("InitializeWiFi() Exited!");
 }
 

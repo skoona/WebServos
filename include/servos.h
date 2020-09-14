@@ -15,24 +15,26 @@
 #include <ArduinoJson.h>          //https://github.com/bblanchon/ArduinoJson
 
 #define MAX_SERVOS        4                 // Number of Servos for this Project
+#define CALIBRATION_STANDARDS_FILE   F("/calibrate.json")
+#define RECORDING_FILE               F("/records.bin")
+#define CALIBRATION_FILE             F("/servos.bin")
+#define CONFIG_PARAM_LEN 16
 
 typedef struct _qitem {
   uint32_t servo;
   uint32_t degree;
-  uint32_t timeSequence;
 } QItem, *PQItem;
 
 typedef struct __attribute__((packed)) _servoCalibration {
+  char      name[CONFIG_PARAM_LEN];  // 16
   uint32_t  current;
   uint32_t  degree;
+  uint32_t  maxDegree;
   uint32_t  minPosition;
   uint32_t  maxPosition;
+  uint32_t  minPulseWidth;
+  uint32_t  maxPulseWidth;
 }  ServoCalibration, *PServoCalibration;
-
-extern int giDegreeMax;   // Config Params
-extern int giMaxRecCnt;   // Config Params 
-extern int giMinPulseWidth;   // Config Params
-extern int giMaxPulseWidth;   // Config Params 
 
 extern AsyncWebSocket ws;
 

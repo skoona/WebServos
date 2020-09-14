@@ -1,0 +1,38 @@
+{
+    "Servos": {
+        "calibrationRequired": true,
+        "maxRecordingCount": 240,
+        "0": {
+            "name": "gripper",
+            "maxDegree": 90,
+            "minPulseWidth": 500,
+            "maxPulseWidth": 833,
+            "minPosition": 100,
+            "maxPosition": 1010
+        },
+        "1": {
+            "name": "foreArm",
+            "maxDegree": 180,
+            "minPulseWidth": 500,
+            "maxPulseWidth": 1667,
+            "minPosition": 100,
+            "maxPosition": 2000
+        },
+        "2": {
+            "name": "shoulder",
+            "maxDegree": 180,
+            "minPulseWidth": 500,
+            "maxPulseWidth": 1667,
+            "minPosition": 100,
+            "maxPosition": 2000
+        },
+        "3": {
+            "name": "base",
+            "maxDegree": 180,
+            "minPulseWidth": 500,
+            "maxPulseWidth": 1667,
+            "minPosition": 100,
+            "maxPosition": 2000
+        }
+    }
+}
