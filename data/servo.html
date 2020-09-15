@@ -127,12 +127,20 @@
 
 	<script language="javascript" type="text/javascript">
 		var url = "ws://"+ window.location.hostname + "/ws"; //":1337/";
+		var gripperOpts = { 
+				debug: false, 
+				knobSize:'70px',     // 30%
+				wheelSize:'200px',   // 100%
+				minDegree: 0, 
+				maxDegree: 90, 
+				touchMode: "knob"
+			};
 		var opts = { 
 				debug: false, 
 				knobSize:'70px',     // 30%
 				wheelSize:'200px',   // 100%
 				minDegree: 0, 
-				maxDegree: 270, 
+				maxDegree: 180, 
 				touchMode: "knob"
 			};
 		var online = false, 
@@ -144,9 +152,9 @@
 		function init() {
 
 		    // Assign page elements to variables
-			vdial0 = JogDial(document.getElementById("dial0"), opts)
+			vdial0 = JogDial(document.getElementById("dial0"), gripperOpts)
 				.on("mouseup", function(event){ 
-						$('#dial0_meter div').css('width', Math.round((event.target.rotation/opts.maxDegree)*100) + '%' );
+						$('#dial0_meter div').css('width', Math.round((event.target.rotation/gripperOpts.maxDegree)*100) + '%' );
 						$('#title0').html( Math.round(event.target.degree) + '&deg;' );
 						doSend('{"action":"follow","servo":0,"degree":' + Math.floor( event.target.degree ) +'}');
 					});
@@ -220,7 +228,7 @@
 			if(package.servo == 0) {
 				vdial0.angle(package.degree); 
 				$('#title0').html( package.degree + '&deg;' );
-				$('#dial0_meter div').css('width', ( package.degree/opts.maxDegree*100 ) + '%' );
+				$('#dial0_meter div').css('width', ( package.degree/gripperOpts.maxDegree*100 ) + '%' );
 				
 			} else if (package.servo == 1) {
 				vdial1.angle(package.degree); 

@@ -15,10 +15,11 @@
 #include <ArduinoJson.h>          //https://github.com/bblanchon/ArduinoJson
 
 #define MAX_SERVOS        4                 // Number of Servos for this Project
-#define CALIBRATION_STANDARDS_FILE   F("/calibrate.json")
-#define RECORDING_FILE               F("/records.bin")
-#define CALIBRATION_FILE             F("/servos.bin")
 #define CONFIG_PARAM_LEN 16
+
+#define CALIBRATION_STANDARDS_FILE   "/calibrate.json"
+#define RECORDING_FILE               "/records.bin"
+#define CALIBRATION_FILE             "/servos.bin"
 
 typedef struct _qitem {
   uint32_t servo;
@@ -27,7 +28,7 @@ typedef struct _qitem {
 
 typedef struct __attribute__((packed)) _servoCalibration {
   char      name[CONFIG_PARAM_LEN];  // 16
-  uint32_t  current;
+  uint32_t  analog;
   uint32_t  degree;
   uint32_t  maxDegree;
   uint32_t  minPosition;
@@ -36,9 +37,12 @@ typedef struct __attribute__((packed)) _servoCalibration {
   uint32_t  maxPulseWidth;
 }  ServoCalibration, *PServoCalibration;
 
+extern ServoCalibration calibrate[MAX_SERVOS];
 extern AsyncWebSocket ws;
 
-void initializeServoControls(); 
+void updateOLEDDisplay();
+void toggleLED();
+void initServoControls(); 
 bool servoRecordInterval(bool startStopFlag);
 void onEvent( AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventType type, void * arg, uint8_t *data, size_t len);
 

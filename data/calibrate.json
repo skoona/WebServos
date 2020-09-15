@@ -6,7 +6,7 @@
             "name": "gripper",
             "maxDegree": 90,
             "minPulseWidth": 500,
-            "maxPulseWidth": 833,
+            "maxPulseWidth": 834,
             "minPosition": 100,
             "maxPosition": 1010
         },

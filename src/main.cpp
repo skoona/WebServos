@@ -21,9 +21,13 @@
 #include <FS.h>
 
 #define CONFIG_FILENAME          F("/wifi_cred.dat")
-#define PIN_LED LED_BUILTIN
+#define PIN_LED   LED_BUILTIN
 #define PIN_SDA           17  // blue
 #define PIN_SCL           16  // gray
+
+#define SKN_PGM_NAME      "WebServos"
+#define SKN_PGM_VERSION   "v1.0.2"
+
 
 #include <SPIFFS.h>
 FS* filesystem =      &SPIFFS;
@@ -51,21 +55,39 @@ void toggleLED()
 }
 
 void updateOLEDDisplay() {
+  char buf[32];
   display.clear();
-  display.display();
   display.setFont(ArialMT_Plain_16);
     display.drawString(0, 0, "IP: ");
     display.drawString(display.getStringWidth("IP: "), 0, WiFi.localIP().toString().c_str());
+  
+  display.setFont(ArialMT_Plain_10);
+  for (int idx = 0, y = 15; idx < MAX_SERVOS; idx++, y += 10) {
+    snprintf(buf, sizeof(buf), "Srv%d: %03u• %04u• %04uµv", idx, 
+          calibrate[idx].degree, calibrate[idx].maxDegree, calibrate[idx].analog);
+    display.drawString(0, y, buf);
+  }
 
-  // display.setFont(ArialMT_Plain_10);
-    display.drawString(0, 16, "DegreeMax");
-    display.drawString(display.getStringWidth("DegreeMax: "), 16, cfgDegreeMax);
-    display.drawString(0, 32, "MaxRecCnt" );
-    display.drawString(display.getStringWidth("MaxRecCnt: "), 32, cfgMaxRecCnt );
-    display.drawString(0, 48, "MinPulse" );
-    display.drawString(display.getStringWidth("DegreeMax: "), 48, cfgMinPulse );
-    display.drawString(0, 64, "MaxPulse" );
-    display.drawString(display.getStringWidth("DegreeMax: "), 64, cfgMaxPulse );
+  display.display();
+}
+
+void initOledDisplay() {
+  Wire.begin(PIN_SDA, PIN_SCL, 400000UL);
+  display.init();
+
+  display.flipScreenVertically();
+  display.setFont(ArialMT_Plain_16);
+  display.setTextAlignment(TEXT_ALIGN_LEFT);
+  
+  vTaskDelay(pdMS_TO_TICKS(1000));
+  display.clear();
+
+  // write the buffer to the display
+  display.drawString(16, 0, SKN_PGM_NAME);
+  display.drawString(32, 18, SKN_PGM_VERSION);
+
+  display.setFont(ArialMT_Plain_10);
+  display.drawString(16, 40, ARDUINO_BOARD);
 
   display.display();
 }
@@ -78,18 +100,18 @@ void onPageNotFound(AsyncWebServerRequest *request) {
   request->send(404, "text/plain", "Not found");
 }
 
-void initializeWiFi() { 
+void initWiFi() { 
   wifiTool.begin(false);
   if (!wifiTool.wifiAutoConnect()) {
     Serial.println("fail to connect to wifi!!!!");
     wifiTool.runApPortal();
   }
- 
-  Serial.println("InitializeWiFi() Exited!");
+  // updateOLEDDisplay();
+  Serial.println("initWiFi() Exited!");
 }
 
-void initializeUI() {
-  Serial.println("Starting Primary Operations");
+void initUI() {
+  Serial.println("initUI(): Starting Primary Operations");
   
   webServer.serveStatic("/", SPIFFS, "/").setDefaultFile("servo.html").setFilter(ON_STA_FILTER);  
   webServer.onNotFound(onPageNotFound);
@@ -99,7 +121,9 @@ void initializeUI() {
   webServer.addHandler(&ws);
   webServer.begin();
 
-  Serial.println("initializeUI() Exited!");
+  updateOLEDDisplay();
+
+  Serial.println("initUI() Exited!");
 }
 
 void setup() {
@@ -108,38 +132,29 @@ void setup() {
   Serial.begin(115200); 
   while (!Serial);
 
-  Wire.begin(PIN_SDA, PIN_SCL, 400000U);
-  display.init();
+  initOledDisplay();
 
-  display.flipScreenVertically();
-  display.setFont(ArialMT_Plain_10);
-  display.setTextAlignment(TEXT_ALIGN_LEFT);
-  display.clear();
-
-  // write the buffer to the display
-  display.drawString(0, 0, "WebServos");
-  display.display();
-  
   Serial.print("\nStarting Async WebServos using " + String(FS_Name));
   Serial.println(" on " + String(ARDUINO_BOARD));
 
-  // Format FileFS if not yet
+  // Enable FileFS 
   if (!FileFS.begin(false)) {
     Serial.print(FS_Name);
     Serial.println(F(" Required Service Offline!"));    
   }
+
   /* Handle WiFi/AP
   */
-  initializeWiFi();
+  initWiFi();
 
   /*
    * Init Servo
   */
-  initializeServoControls();  
+  initServoControls();  
 
   /* Initilize UI
   */
-  initializeUI();
+  initUI();
   
   Serial.printf("Setup Complete !\n");
 }
