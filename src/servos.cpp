@@ -79,9 +79,9 @@ bool loadServoStandards(void) {
       giMaxRecordingCount = json["Servos"]["maxRecordingCount"];          
   }
   
-  char index[] = "0123";
+  char index[4][2] = {"0","1","2","3"};
   for (int idx = 0; idx < MAX_SERVOS; idx++) {
-      strlcpy(calibrate[idx].name, json["Servos"][index[idx]]["name"] | "na", sizeof(calibrate[idx].name));
+      strlcpy(calibrate[idx].name, json["Servos"][index[idx]]["name"] | "N/A", sizeof(calibrate[idx].name));
       calibrate[idx].maxDegree     = json["Servos"][index[idx]]["maxDegree"];
       calibrate[idx].minPosition   = json["Servos"][index[idx]]["minPosition"];
       calibrate[idx].maxPosition   = json["Servos"][index[idx]]["maxPosition"];
@@ -109,7 +109,7 @@ bool saveServoStandards(void)
       json["Servos"]["maxRecordingCount"] = giMaxRecordingCount;
   }
   
-  char index[] = "0123";
+  char index[4][2] = {"0","1","2","3"};
   for (int idx = 0; idx < MAX_SERVOS; idx++) {
     json["Servos"][index[idx]]["name"]          = calibrate[idx].name;
     json["Servos"][index[idx]]["maxDegree"]     = calibrate[idx].maxDegree;
@@ -358,7 +358,7 @@ void servoTask(void * pServo) {
       servoDegrees = pqi->degree % calibrate[servo].maxDegree;
       if (servoDegrees == 0 && pqi->degree == calibrate[servo].maxDegree ) { 
         servoDegrees = pqi->degree;
-      } else if (servoDegrees < 0 ) {
+      } else if (servoDegrees < 1 ) {
         servoDegrees = 0;
       }
 
@@ -468,6 +468,15 @@ void initServoControls() {
   }
 
   if (servoCalibrate && gbCalibrationRequired) {    
+    for (int idx = 0; idx < MAX_SERVOS; idx++) {
+        Serial.printf("Name: %s, %03u°, %04uµs, %04uµv, %04uµs, %04uµs\n",calibrate[idx].name,
+        calibrate[idx].maxDegree,
+        calibrate[idx].minPosition,
+        calibrate[idx].maxPosition,
+        calibrate[idx].minPulseWidth,
+        calibrate[idx].maxPulseWidth);
+    }
+
     /*
       * Calibrate Servos
     */

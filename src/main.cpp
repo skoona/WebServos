@@ -106,7 +106,7 @@ void initWiFi() {
     Serial.println("fail to connect to wifi!!!!");
     wifiTool.runApPortal();
   }
-  // updateOLEDDisplay();
+  updateOLEDDisplay();
   Serial.println("initWiFi() Exited!");
 }
 
