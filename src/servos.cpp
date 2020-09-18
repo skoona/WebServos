@@ -18,13 +18,16 @@ static const int    servosAdcPins[MAX_SERVOS] = {32, 33, 34, 35};
 static const int  servoMtrChannel[MAX_SERVOS] = {0, 1, 2, 3};
 static const int servoFdBKChannel[MAX_SERVOS] = {4, 5, 6, 7};
 
-volatile unsigned long guiTimeBase   = 0,      // default time base, target 0.5 seconds
-                  gulLastTimeBase    = 0,      // time base delta
-                  gulRecordInterval  = 500,    // Ticks interval 0.5 seconds
-                  gulRecordCounter   = 0;      // Number of recorded records
+volatile unsigned long guiTimeBase = 0,        // default time base, target 0.5 seconds
+    gulLastTimeBase = 0,                       // time base delta
+    gulDisplayTimeBase = 0,                    // Display time base delta
+    gulRecordInterval = 500,                   // Ticks interval 0.5 seconds
+    gulDisplayInterval = 1250,                 // Ticks interval 1.25 seconds
+    gulRecordCounter = 0;                      // Number of recorded records
 volatile bool     gbRecordMode       = false,  // Recording
                   gvDuration         = false,  // 1/2 second marker
                   gbWSOnline         = false;  // WebSocket Client Connected
+                  
 
 bool gbCalibrationRequired = false;
 int  giMaxRecordingCount   = 240;
@@ -169,7 +172,7 @@ void servoRecordRequest() {
         recordings[servo].degree = recordings[servo].degree % recordings[servo].maxDegree;
       }
       snprintf(recordBuffer, sizeof(recordBuffer), "{\"action\":\"record\",\"servo\":%d,\"degree\":%u}", servo, recordings[servo].degree );
-      Serial.printf("Recording: [%lu] %s\n", guiTimeBase, recordBuffer);
+      Serial.printf("Recording: [%03lu] %s\n", gulRecordCounter, recordBuffer);
       ws.printfAll("%s", recordBuffer);
     }
     saveRecordedMovements(false, (const uint8_t *)&recordings );
@@ -178,8 +181,12 @@ void servoRecordRequest() {
 }
 
 bool servoRecordInterval(bool startStopFlag = false) {
+  bool bUpdateDisplay =  false;
+
   guiTimeBase = millis();
   gvDuration = ((guiTimeBase - gulLastTimeBase) >= gulRecordInterval);
+  bUpdateDisplay = ((guiTimeBase - gulDisplayTimeBase) >= gulDisplayInterval);
+
   // Serial.println("servoRecordInterval() Enter");
   if (gbWSOnline && gvDuration && gbRecordMode) {
     toggleLED();
@@ -188,6 +195,11 @@ bool servoRecordInterval(bool startStopFlag = false) {
 
   if (gvDuration) { // Every half second poll 
     gulLastTimeBase = guiTimeBase;        
+  }
+
+  if (bUpdateDisplay) {
+    gulDisplayTimeBase = guiTimeBase;
+    updateOLEDDisplay();
   }
 
   // Serial.println("servoRecordInterval() Exit");
@@ -219,7 +231,8 @@ bool attachServos() {
   bool rc = true;
   gbRecordMode = false;
   for(int i = 0; i < MAX_SERVOS; ++i) {
-    if(!servos[i].attach(servosPwmPins[i],Servo::CHANNEL_NOT_ATTACHED, 0, calibrate[i].maxDegree, calibrate[i].minPulseWidth, calibrate[i].maxPulseWidth )) {
+    if (!servos[i].attach(servosPwmPins[i], servoMtrChannel[i], 0, calibrate[i].maxDegree, calibrate[i].minPulseWidth, calibrate[i].maxPulseWidth))
+    {
       Serial.printf("Servo %d attach error! \n", i);
       rc = false;
     }
@@ -312,7 +325,7 @@ void replayServoTask(void * _ptr) {
 
           recordsToRead = size / sizeof(recordings);
           Serial.printf("Recording File: size=%d, recordsToRead=%d\n", size, recordsToRead);
-          while(recordsToRead != 0) {
+          while(recordsToRead != 0 && gbRecordMode) {
             toggleLED();
             read = file.readBytes((char *)&recordings, sizeof(recordings));
             recordsToRead -= 1;
@@ -321,8 +334,7 @@ void replayServoTask(void * _ptr) {
               servoActionRequest(i, recordings[i].degree);
             }
                         
-            updateOLEDDisplay();
-            vTaskDelay(pdMS_TO_TICKS(500)); // replay in same period as recorded            
+            vTaskDelay(pdMS_TO_TICKS(500)); // replay in same period as recorded
           }
 
           file.close();      
@@ -461,8 +473,9 @@ void initServoControls() {
       calibrate[i].minPulseWidth = 500;
       calibrate[i].maxPulseWidth = 834;
     }
-  
-    if(!servos[i].attach(servosPwmPins[i],Servo::CHANNEL_NOT_ATTACHED, 0, calibrate[i].maxDegree, calibrate[i].minPulseWidth, calibrate[i].maxPulseWidth )) {
+
+    if (!servos[i].attach(servosPwmPins[i], servoMtrChannel[i], 0, calibrate[i].maxDegree, calibrate[i].minPulseWidth, calibrate[i].maxPulseWidth))
+    {
       Serial.printf("Servo %d attach error! \n", i);
     }
   }
@@ -598,12 +611,12 @@ void onEvent( AsyncWebSocket * server,
             if ( !gbRecordMode && doc.containsKey("degree") ) {
               servoActionRequest(doc["servo"], doc["degree"]);        
             } else if (!doc.containsKey("degree")) {
-              attachServos();
+              if (gbRecordMode) {
+                attachServos();
+              }
               server->printfAll("{\"action\":\"follow\"}");
               lastStateBuffer = "{\"action\":\"state\",\"button\":\"follow\"}";
             }
-            updateOLEDDisplay();
-
           } else if ( strcmp(doc["action"], "play") == 0 ) {
             Serial.printf("Play Action \n");
             if(gbRecordMode) {

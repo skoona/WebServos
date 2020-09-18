@@ -26,7 +26,7 @@
 #define PIN_SCL           16  // gray
 
 #define SKN_PGM_NAME      "WebServos"
-#define SKN_PGM_VERSION   "v1.0.2"
+#define SKN_PGM_VERSION   "v1.2.0"
 
 
 #include <SPIFFS.h>
