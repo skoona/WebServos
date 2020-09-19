@@ -6,6 +6,7 @@
  * PWM Output Pin   21   19   23   18 
  * PWM Channel       4    5    6    7
  * ADC Input Pin    32   33   34   35
+ * OLED I2c Pin     16-scl, 17-sda
  * 
  */
 #ifndef _SERVOS
@@ -14,7 +15,7 @@
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>          //https://github.com/bblanchon/ArduinoJson
 
-#define MAX_SERVOS        4                 // Number of Servos for this Project
+#define MAX_SERVOS        4       // Number of Servos for this Project
 #define CONFIG_PARAM_LEN 16
 
 #define CALIBRATION_STANDARDS_FILE   "/calibrate.json"

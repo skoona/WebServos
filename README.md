@@ -18,6 +18,15 @@ Features:
 ## ESP32 Board
 LOLIN32 V1.0.0 WiFi + bluetooth Module ESP-32 4MB FLASH Development Board
 
+## Operation
+1. On Powerup without prior config: start AP where name ends with *-WebServos
+2. Browse ESP32's address of IP: 172.217.28.1
+3. Populate SSID and Password fields as needed (3 available), and press Save
+4. ESP32 reboots and connects to credentialed 2.4Ghz network
+5. See LAN IP being shown on the OLED, Browse to IP shown
+
+
+
 ## Key Libraries
 
 * [ESPAsync_WiFiManager](https://github.com/khoih-prog/ESPAsync_WiFiManager)
