@@ -38,6 +38,8 @@ typedef struct __attribute__((packed)) _servoCalibration {
   uint32_t  maxPulseWidth;
 }  ServoCalibration, *PServoCalibration;
 
+extern volatile bool gbRecordMode;
+extern unsigned long gulRecordCounter;
 extern ServoCalibration calibrate[MAX_SERVOS];
 extern AsyncWebSocket ws;
 

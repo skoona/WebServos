@@ -17,13 +17,16 @@ static const int    servosPwmPins[MAX_SERVOS] = {21, 19, 23, 18};
 static const int    servosAdcPins[MAX_SERVOS] = {32, 33, 34, 35};
 static const int  servoMtrChannel[MAX_SERVOS] = {0, 1, 2, 3};
 static const int servoFdBKChannel[MAX_SERVOS] = {4, 5, 6, 7};
+static const int            gotPlaybackSignal = BIT0;
 
-volatile unsigned long guiTimeBase = 0,        // default time base, target 0.5 seconds
-    gulLastTimeBase = 0,                       // time base delta
-    gulDisplayTimeBase = 0,                    // Display time base delta
-    gulRecordInterval = 500,                   // Ticks interval 0.5 seconds
-    gulDisplayInterval = 1250,                 // Ticks interval 1.25 seconds
-    gulRecordCounter = 0;                      // Number of recorded records
+volatile unsigned long guiTimeBase = 0,          // default time base, target 0.5 seconds
+    gulLastTimeBase = 0,                         // time base delta
+    gulDisplayTimeBase = 0,                      // Display time base delta
+    gulRecordInterval = 500,                     // Ticks interval 0.5 seconds
+    gulDisplayInterval = 1250;                   // Ticks interval 1.25 seconds
+
+unsigned long gulRecordCounter = 0;              // Number of recorded records
+
 volatile bool     gbRecordMode       = false,  // Recording
                   gvDuration         = false,  // 1/2 second marker
                   gbWSOnline         = false;  // WebSocket Client Connected
@@ -33,6 +36,7 @@ bool gbCalibrationRequired = false;
 int  giMaxRecordingCount   = 240;
 
 volatile SemaphoreHandle_t servoMutex;
+EventGroupHandle_t evtPlaybackGrp;
 
 TaskHandle_t replayTaskHandle;
 
@@ -189,17 +193,19 @@ bool servoRecordInterval(bool startStopFlag = false) {
 
   // Serial.println("servoRecordInterval() Enter");
   if (gbWSOnline && gvDuration && gbRecordMode) {
-    toggleLED();
     servoRecordRequest();
   }
 
-  if (gvDuration) { // Every half second poll 
-    gulLastTimeBase = guiTimeBase;        
+  if (bUpdateDisplay && !gbRecordMode) {
+    updateOLEDDisplay();
+  }
+
+  if (gvDuration) { // Every half second poll
+    gulLastTimeBase = guiTimeBase;
   }
 
   if (bUpdateDisplay) {
     gulDisplayTimeBase = guiTimeBase;
-    updateOLEDDisplay();
   }
 
   // Serial.println("servoRecordInterval() Exit");
@@ -293,20 +299,22 @@ void calibrateServos(long degrees) {
 }
 
 void replayServoTask(void * _ptr) {
-  uint32_t ulNotificationValue = 0;
   size_t size = 0, read = 0;
   int recordsToRead = 0;
   ServoCalibration recordings[MAX_SERVOS];
+  EventBits_t evtBits;
 
   memcpy(&recordings, &calibrate, sizeof(recordings));
 
   vTaskDelay(pdMS_TO_TICKS(1000));
 
-  for(;;){ // infinite loop        
+  for(;;){ // infinite loop
 
-    ulNotificationValue = ulTaskNotifyTake( pdTRUE, portMAX_DELAY);
-    if ( ulNotificationValue == 1 ) {
-      Serial.printf("servoReplayTask() Active: %u\n", ulNotificationValue);
+    evtBits = xEventGroupWaitBits(evtPlaybackGrp, gotPlaybackSignal, true, true, portMAX_DELAY);
+    Serial.printf("servoReplayTask() Got: %u\n", evtBits);
+
+    if ( evtBits & gotPlaybackSignal ){
+      Serial.println("servoReplayTask() Active!");
 
       vTaskDelay(pdMS_TO_TICKS(1000));
 
@@ -325,7 +333,7 @@ void replayServoTask(void * _ptr) {
 
           recordsToRead = size / sizeof(recordings);
           Serial.printf("Recording File: size=%d, recordsToRead=%d\n", size, recordsToRead);
-          while(recordsToRead != 0 && gbRecordMode) {
+          while(recordsToRead != 0 && !gbRecordMode) {
             toggleLED();
             read = file.readBytes((char *)&recordings, sizeof(recordings));
             recordsToRead -= 1;
@@ -333,19 +341,20 @@ void replayServoTask(void * _ptr) {
             for(int i =0; i < MAX_SERVOS; i++) {
               servoActionRequest(i, recordings[i].degree);
             }
-                        
             vTaskDelay(pdMS_TO_TICKS(500)); // replay in same period as recorded
           }
 
           file.close();      
         }
       }
-    } else {
-      Serial.printf("servoReplayTask() Timeout: %u\n", ulNotificationValue);
+    }
+    else
+    {
+      Serial.printf("servoReplayTask() Timeout: %u\n", evtBits);
       vTaskDelay(pdMS_TO_TICKS(1000));
     }
-    
-    Serial.println("servoReplayTask() Waiting!");
+
+    Serial.println("servoReplayTask() Finished!");
 
   }
   vTaskDelete( NULL );
@@ -358,11 +367,11 @@ void servoTask(void * pServo) {
       vDelay = 0,
       lastKnownDegrees[MAX_SERVOS] = {0,0,0,0};
 
+  Serial.printf("servoTask() Enter: cfgDegreeMax=%u\n", calibrate[servo].maxDegree);
   vTaskDelay(pdMS_TO_TICKS(1000));
 
   for(;;){ // infinite loop        
     if ( xQueueReceive(qRequest[servo], &pqi, portMAX_DELAY) == pdTRUE) {
-      Serial.printf("servoTask() Enter: cfgDegreeMax=%u\n", calibrate[servo].maxDegree);
       if (NULL == pqi) {
         vTaskDelay(pdMS_TO_TICKS(1000));
         continue;
@@ -403,6 +412,9 @@ void servoTask(void * pServo) {
 void initServoTasks() {
   static const char *pchTitle[5] = {"ServoTask-00", "ServoTask-01", "ServoTask-02", "ServoTask-03", "ReplayServoTask"};
   static int  servoIds[MAX_SERVOS] = {0,1,2,3};
+
+  evtPlaybackGrp = xEventGroupCreate();
+
 
   for(int servo = 0; servo < MAX_SERVOS; ++servo) {
     xTaskCreatePinnedToCore(
@@ -482,7 +494,7 @@ void initServoControls() {
 
   if (servoCalibrate && gbCalibrationRequired) {    
     for (int idx = 0; idx < MAX_SERVOS; idx++) {
-        Serial.printf("Name: %s, %03u°, %04uµs, %04uµv, %04uµs, %04uµs\n",calibrate[idx].name,
+        Serial.printf("Name: %s, %03u°, %04uµv, %04uµv, %04uµs, %04uµs\n",calibrate[idx].name,
         calibrate[idx].maxDegree,
         calibrate[idx].minPosition,
         calibrate[idx].maxPosition,
@@ -495,9 +507,10 @@ void initServoControls() {
     */
     calibrateServos(calibrate[1].maxDegree/2);
     calibrateServos(0);    
-    calibrateServos(calibrate[1].maxDegree/2);
     calibrateServos(calibrate[1].maxDegree);
-    calibrateServos(calibrate[1].maxDegree/2);
+    calibrateServos(0);
+    calibrateServos(calibrate[1].maxDegree);
+    calibrateServos(calibrate[1].maxDegree / 2);
 
     Serial.println("Saving Servo Calibration!");
     calibrateFile = FileFS.open(CALIBRATION_FILE, FILE_WRITE);  // FILE_APPEND
@@ -624,8 +637,7 @@ void onEvent( AsyncWebSocket * server,
             }
             server->printfAll("{\"action\":\"play\"}");
             lastStateBuffer = "{\"action\":\"state\",\"button\":\"play\"}";
-            server->printfAll("{\"action\":\"follow\"}");
-            xTaskNotifyGive(replayTaskHandle); // release the BG Task
+            xEventGroupSetBits(evtPlaybackGrp, gotPlaybackSignal);  // release rePlay Task
 
           } else if ( strcmp(doc["action"], "startRecord") == 0 ) {
             Serial.printf("StartRecord Action \n");

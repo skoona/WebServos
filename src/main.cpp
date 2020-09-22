@@ -26,7 +26,7 @@
 #define PIN_SCL           16  // gray
 
 #define SKN_PGM_NAME      "WebServos"
-#define SKN_PGM_VERSION   "v1.2.0"
+#define SKN_PGM_VERSION   "v1.3.0"
 
 
 #include <SPIFFS.h>
@@ -48,8 +48,7 @@ SSD1306Wire display(0x3c, PIN_SDA, PIN_SCL);
 
 #include "servos.h"
 
-void toggleLED()
-{
+void toggleLED() { 
   //toggle state
   digitalWrite(PIN_LED, !digitalRead(PIN_LED));
 }
@@ -58,9 +57,15 @@ void updateOLEDDisplay() {
   char buf[32];
   display.clear();
   display.setFont(ArialMT_Plain_16);
+  if (gbRecordMode) {
+    snprintf(buf, sizeof(buf), "Recording: %03lu", gulRecordCounter);
+    display.drawString(0, 0, buf);
+  } else {
     display.drawString(0, 0, "IP: ");
     display.drawString(display.getStringWidth("IP: "), 0, WiFi.localIP().toString().c_str());
-  
+    toggleLED();
+  }
+
   display.setFont(ArialMT_Plain_10);
   for (int idx = 0, y = 15; idx < MAX_SERVOS; idx++, y += 10) {
     snprintf(buf, sizeof(buf), "Srv%d: %03u• %04u• %04uµv", idx, 
