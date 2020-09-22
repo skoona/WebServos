@@ -479,11 +479,19 @@ void initServoControls() {
     adc[i].attach(servosAdcPins[i]);
 
     if (servoCalibrate && !gbCalibrationRequired) {    // skip if standards were read  
+     if (0 == i) {
       calibrate[i].maxDegree = 90;
       calibrate[i].minPosition = 100;
       calibrate[i].maxPosition = 1010;
       calibrate[i].minPulseWidth = 500;
       calibrate[i].maxPulseWidth = 834;
+     } else {
+       calibrate[i].maxDegree = 180;
+       calibrate[i].minPosition = 100;
+       calibrate[i].maxPosition = 2000;
+       calibrate[i].minPulseWidth = 500;
+       calibrate[i].maxPulseWidth = 1667;
+     }
     }
 
     if (!servos[i].attach(servosPwmPins[i], servoMtrChannel[i], 0, calibrate[i].maxDegree, calibrate[i].minPulseWidth, calibrate[i].maxPulseWidth))
